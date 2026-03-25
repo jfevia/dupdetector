@@ -1,0 +1,86 @@
+<Project>
+
+    <PropertyGroup>
+        <ProductName>DupDetector</ProductName>
+        <RootNamespace>DupDetector</RootNamespace>
+        <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    </PropertyGroup>
+
+    <PropertyGroup>
+        <EnableNETAnalyzers>true</EnableNETAnalyzers>
+        <AnalysisLevel>latest</AnalysisLevel>
+        <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+        <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+        <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    </PropertyGroup>
+
+    <!-- Only audit direct package dependencies for vulnerabilities.
+         SonarAnalyzer.CSharp pulls in System.Drawing.Common transitively (build-only, never shipped),
+         so transitive audit noise is suppressed here. -->
+    <PropertyGroup>
+        <NuGetAuditMode>direct</NuGetAuditMode>
+    </PropertyGroup>
+
+    <!-- Suppress diagnostics that are too noisy or don't apply to this tool -->
+    <PropertyGroup>
+        <!-- CS1591: Missing XML comment for publicly visible type or member -->
+        <NoWarn>$(NoWarn);CS1591</NoWarn>
+        <!-- CA1031: Do not catch general exception types (we need broad catches for fallback logic) -->
+        <NoWarn>$(NoWarn);CA1031</NoWarn>
+        <!-- CA1062: Validate arguments of public methods (not applicable for internal tool) -->
+        <NoWarn>$(NoWarn);CA1062</NoWarn>
+        <!-- CA2007: Consider calling ConfigureAwait on awaited tasks (console tool) -->
+        <NoWarn>$(NoWarn);CA2007</NoWarn>
+        <!-- CA1724: Type names should not match namespaces -->
+        <NoWarn>$(NoWarn);CA1724</NoWarn>
+        <!-- CA1852: Seal internal types (not beneficial here) -->
+        <NoWarn>$(NoWarn);CA1852</NoWarn>
+        <!-- CA1822: member can be static – existing code not refactored to static -->
+        <NoWarn>$(NoWarn);CA1822</NoWarn>
+        <!-- CA1805: explicitly initialized to default – existing code style -->
+        <NoWarn>$(NoWarn);CA1805</NoWarn>
+        <!-- CA1305: IFormatProvider for ToString – existing YAML renderer -->
+        <NoWarn>$(NoWarn);CA1305</NoWarn>
+        <!-- IDE0007: use var – existing code uses explicit types in some places -->
+        <NoWarn>$(NoWarn);IDE0007</NoWarn>
+        <!-- IDE0022: block body for method – existing code uses expression-body -->
+        <NoWarn>$(NoWarn);IDE0022</NoWarn>
+        <!-- IDE0028/IDE0300/IDE0305: collection initialization simplification -->
+        <NoWarn>$(NoWarn);IDE0028;IDE0300;IDE0305</NoWarn>
+        <!-- IDE0078: pattern matching preference – existing code uses is-cast -->
+        <NoWarn>$(NoWarn);IDE0078</NoWarn>
+        <!-- S3260: private class should be sealed – nested rewriter class -->
+        <NoWarn>$(NoWarn);S3260</NoWarn>
+        <!-- S2325: make method static – existing API kept as instance for extensibility -->
+        <NoWarn>$(NoWarn);S2325</NoWarn>
+        <!-- S121: curly braces for single-line statements – existing code style -->
+        <NoWarn>$(NoWarn);S121</NoWarn>
+        <!-- S6608: use indexing instead of First/Last – existing LINQ usage -->
+        <NoWarn>$(NoWarn);S6608</NoWarn>
+        <!-- S6966: await async I/O – existing Console.Error.WriteLine calls -->
+        <NoWarn>$(NoWarn);S6966</NoWarn>
+        <!-- IDE0011: Add braces to if/else – existing code style (single-line guards) -->
+        <NoWarn>$(NoWarn);IDE0011</NoWarn>
+        <!-- IDE0200: Lambda expression can be removed – existing code style -->
+        <NoWarn>$(NoWarn);IDE0200</NoWarn>
+        <!-- CA1861: Prefer static readonly for constant arrays – existing code -->
+        <NoWarn>$(NoWarn);CA1861</NoWarn>
+        <!-- CA1310: StringComparison for StartsWith – existing Program.cs (not modifiable) -->
+        <NoWarn>$(NoWarn);CA1310</NoWarn>
+        <!-- IDE0005: Unnecessary using directive – existing files use global usings -->
+        <NoWarn>$(NoWarn);IDE0005</NoWarn>
+        <!-- IDE0290: Use primary constructor – existing code style -->
+        <NoWarn>$(NoWarn);IDE0290</NoWarn>
+        <!-- IDE0090: new expression can be simplified – existing test code style -->
+        <NoWarn>$(NoWarn);IDE0090</NoWarn>
+        <!-- xUnit1042: untyped MemberData rows – using object[] is intentional here -->
+        <NoWarn>$(NoWarn);xUnit1042</NoWarn>
+        <!-- IDE0059/S1481: unused assignment in generated test data – intentional discards -->
+        <NoWarn>$(NoWarn);IDE0059;S1481</NoWarn>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="SonarAnalyzer.CSharp" PrivateAssets="all" />
+    </ItemGroup>
+
+</Project>
