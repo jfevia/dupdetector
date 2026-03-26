@@ -120,6 +120,95 @@ public class DuplicateDetectorTests
     }
 
     [Fact]
+    public void Constructors_AreNotExtractedWhenKindExcluded()
+    {
+        var code = """
+            public class OrderService {
+                public OrderService(string id, string name) {
+                    _id = id;
+                    _name = name;
+                    _created = DateTime.Now;
+                    Log("Created");
+                }
+            }
+            """;
+
+        var tree = CSharpSyntaxTree.ParseText(code);
+        var blocks = _extractor.Extract("test.cs", tree, code, 3, DetectionKind.Methods | DetectionKind.LocalFunctions);
+
+        Assert.Empty(blocks);
+    }
+
+    [Fact]
+    public void Constructors_AreExtractedWhenKindEnabled()
+    {
+        var code = """
+            public class OrderService {
+                public OrderService(string id, string name) {
+                    _id = id;
+                    _name = name;
+                    _created = DateTime.Now;
+                    Log("Created");
+                }
+            }
+            """;
+
+        var tree = CSharpSyntaxTree.ParseText(code);
+        var blocks = _extractor.Extract("test.cs", tree, code, 3, DetectionKind.Constructors);
+
+        Assert.NotEmpty(blocks);
+        Assert.Contains(blocks, b => b.MethodName == "OrderService");
+    }
+
+    [Fact]
+    public void Methods_AreNotExtractedWhenKindExcluded()
+    {
+        var code = """
+            public class Foo {
+                public void DoWork(int x, int y) {
+                    var z = x + y;
+                    Console.WriteLine(z);
+                    return;
+                }
+            }
+            """;
+
+        var tree = CSharpSyntaxTree.ParseText(code);
+        var blocks = _extractor.Extract("test.cs", tree, code, 3, DetectionKind.Constructors | DetectionKind.LocalFunctions);
+
+        Assert.Empty(blocks);
+    }
+
+    [Fact]
+    public void AllKinds_AreExtractedByDefault()
+    {
+        var code = """
+            public class Foo {
+                public Foo() {
+                    _x = 0;
+                    _y = 0;
+                    _z = 0;
+                }
+                public void DoWork(int x, int y) {
+                    void Local() {
+                        Console.WriteLine(x + y);
+                    }
+                    Local();
+                }
+            }
+            """;
+
+        var tree = CSharpSyntaxTree.ParseText(code);
+        // Default: DetectionKind.All
+        var blocks = _extractor.Extract("test.cs", tree, code, 3);
+
+        var methodNames = blocks.Select(b => b.MethodName).Distinct().ToList();
+        Assert.Contains("Foo", methodNames);
+        Assert.Contains("DoWork", methodNames);
+        Assert.Contains("Local", methodNames);
+    }
+
+    [Fact]
     public void Clusters_AreSortedByScoreDescending()
     {
         var code = """

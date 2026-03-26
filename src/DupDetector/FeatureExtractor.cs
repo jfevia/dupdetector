@@ -23,16 +23,16 @@ public class FeatureExtractor
 {
     private readonly CodeNormalizer _normalizer = new();
 
-    public List<CodeBlock> Extract(string filePath, SyntaxTree syntaxTree, string sourceText, int minLines)
+    public List<CodeBlock> Extract(string filePath, SyntaxTree syntaxTree, string sourceText, int minLines, DetectionKind kinds = DetectionKind.All)
     {
         var root = syntaxTree.GetRoot();
         var blocks = new List<CodeBlock>();
 
-        // Extract top-level method/constructor/local function declarations
+        // Extract declarations based on the requested detection kinds
         var methodNodes = root.DescendantNodes().Where(n =>
-            n is MethodDeclarationSyntax or
-               ConstructorDeclarationSyntax or
-               LocalFunctionStatementSyntax);
+            (kinds.HasFlag(DetectionKind.Methods) && n is MethodDeclarationSyntax) ||
+            (kinds.HasFlag(DetectionKind.Constructors) && n is ConstructorDeclarationSyntax) ||
+            (kinds.HasFlag(DetectionKind.LocalFunctions) && n is LocalFunctionStatementSyntax));
 
         foreach (var node in methodNodes)
         {

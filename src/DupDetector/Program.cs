@@ -5,31 +5,42 @@ using DupDetector;
 MSBuildLocator.RegisterDefaults();
 
 var options = ParseArgs(args);
-if (string.IsNullOrEmpty(options.InputPath))
+if (options.InputPaths.Count == 0)
 {
-    Console.Error.WriteLine("Usage: dupdetector <path> [options]");
-    Console.Error.WriteLine("  --solution <path>        Solution/project/directory path (alias for positional arg)");
-    Console.Error.WriteLine("  --min-lines <int>        Minimum lines to consider (default: 5)");
-    Console.Error.WriteLine("  --similarity <0-1>       Similarity threshold (default: 0.85)");
-    Console.Error.WriteLine("  --format yaml|json|html  Output format (default: yaml)");
-    Console.Error.WriteLine("  --output <path>          Write output to file instead of stdout");
-    Console.Error.WriteLine("  --exclude <glob>         Exclude pattern (repeatable)");
-    Console.Error.WriteLine("  --include-generated      Include auto-generated files");
+    Console.Error.WriteLine("Usage: dupdetector <path> [<path>...] [options]");
+    Console.Error.WriteLine("  --solution <path>              Solution/project/directory path (repeatable)");
+    Console.Error.WriteLine("  --min-lines <int>              Minimum lines to consider (default: 5)");
+    Console.Error.WriteLine("  --similarity <0-1>             Similarity threshold (default: 0.85)");
+    Console.Error.WriteLine("  --format yaml|json|html        Output format (default: yaml)");
+    Console.Error.WriteLine("  --output <path>                Write output to file instead of stdout");
+    Console.Error.WriteLine("  --exclude <glob>               Exclude pattern (repeatable)");
+    Console.Error.WriteLine("  --include-generated            Include auto-generated files");
+    Console.Error.WriteLine("  --detect <kinds>               Comma-separated kinds to detect: methods,constructors,local-functions (default: all)");
     return 1;
 }
 
 try
 {
-    // 1. Load source files
+    // 1. Load source files from all specified paths
     var loader = new ProjectLoader(options);
-    var documents = await loader.LoadAsync(options.InputPath);
+    var allDocs = new List<(string FilePath, Microsoft.CodeAnalysis.SyntaxTree SyntaxTree, string SourceText)>();
+    foreach (var inputPath in options.InputPaths)
+    {
+        var docs = await loader.LoadAsync(inputPath);
+        allDocs.AddRange(docs);
+    }
+    // Deduplicate by file path (a file may be reachable via multiple input paths)
+    var documents = allDocs
+        .GroupBy(d => d.FilePath, StringComparer.OrdinalIgnoreCase)
+        .Select(g => g.First())
+        .ToList();
 
     // 2. Extract code blocks
     var extractor = new FeatureExtractor();
     var allBlocks = new List<CodeBlock>();
     foreach (var (filePath, syntaxTree, sourceText) in documents)
     {
-        var blocks = extractor.Extract(filePath, syntaxTree, sourceText, options.MinLines);
+        var blocks = extractor.Extract(filePath, syntaxTree, sourceText, options.MinLines, options.DetectionKinds);
         allBlocks.AddRange(blocks);
     }
 
@@ -154,12 +165,13 @@ static DetectionOptions ParseArgs(string[] args)
 {
     var opts = new DetectionOptions();
     int i = 0;
+    bool detectExplicit = false;
 
-    // First positional argument is the input path
-    if (args.Length > 0 && !args[0].StartsWith("--"))
+    // Collect leading positional arguments as input paths (until the first --option)
+    while (i < args.Length && !args[i].StartsWith("--"))
     {
-        opts.InputPath = args[0];
-        i = 1;
+        opts.InputPaths.Add(args[i]);
+        i++;
     }
 
     while (i < args.Length)
@@ -167,7 +179,7 @@ static DetectionOptions ParseArgs(string[] args)
         switch (args[i])
         {
             case "--solution" when i + 1 < args.Length:
-                opts.InputPath = args[++i];
+                opts.InputPaths.Add(args[++i]);
                 break;
             case "--min-lines" when i + 1 < args.Length:
                 if (int.TryParse(args[++i], out var ml)) opts.MinLines = ml;
@@ -188,6 +200,35 @@ static DetectionOptions ParseArgs(string[] args)
                 break;
             case "--include-generated":
                 opts.IncludeGenerated = true;
+                break;
+            case "--detect" when i + 1 < args.Length:
+                // First --detect flag transitions from default (All) to an explicit inclusion set.
+                // Subsequent --detect flags accumulate into the same set.
+                if (!detectExplicit)
+                {
+                    opts.DetectionKinds = DetectionKind.None;
+                    detectExplicit = true;
+                }
+                foreach (var part in args[++i].Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                {
+                    var kind = part.ToLowerInvariant();
+                    if (kind == "all")
+                    {
+                        opts.DetectionKinds = DetectionKind.All;
+                        continue;
+                    }
+                    var resolved = kind switch
+                    {
+                        "methods" => DetectionKind.Methods,
+                        "constructors" => DetectionKind.Constructors,
+                        "local-functions" => DetectionKind.LocalFunctions,
+                        _ => DetectionKind.None
+                    };
+                    if (resolved == DetectionKind.None)
+                        Console.Error.WriteLine($"[warn] Unknown detection kind '{part}'. Valid values: methods, constructors, local-functions, all");
+                    else
+                        opts.DetectionKinds |= resolved;
+                }
                 break;
             default:
                 Console.Error.WriteLine($"[warn] Unknown argument: {args[i]}");

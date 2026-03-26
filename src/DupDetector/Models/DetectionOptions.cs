@@ -7,6 +7,7 @@ public class DetectionOptions
     public string Format { get; set; } = "yaml";
     public List<string> Exclude { get; set; } = new();
     public bool IncludeGenerated { get; set; } = false;
-    public string InputPath { get; set; } = "";
+    public DetectionKind DetectionKinds { get; set; } = DetectionKind.All;
+    public List<string> InputPaths { get; set; } = new();
     public string OutputPath { get; set; } = "";
 }
