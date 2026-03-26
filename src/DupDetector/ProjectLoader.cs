@@ -1,3 +1,4 @@
+using System.Xml.Linq;
 using Microsoft.Build.Locator;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -6,7 +7,7 @@ using Microsoft.CodeAnalysis.MSBuild;
 namespace DupDetector;
 
 /// <summary>
-/// Loads C# source documents from .sln, .csproj, or directory paths.
+/// Loads C# source documents from .sln, .slnx, .csproj, or directory paths.
 /// Falls back to text-based parsing when MSBuildWorkspace is unavailable.
 /// </summary>
 public class ProjectLoader
@@ -23,7 +24,7 @@ public class ProjectLoader
         if (File.Exists(path))
         {
             var ext = Path.GetExtension(path).ToLowerInvariant();
-            if (ext == ".sln" || ext == ".csproj")
+            if (ext == ".sln" || ext == ".slnx" || ext == ".csproj")
             {
                 try
                 {
@@ -56,11 +57,16 @@ public class ProjectLoader
 
     private async Task<List<(string, SyntaxTree, string)>> LoadFromWorkspaceAsync(string path)
     {
+        var ext = Path.GetExtension(path).ToLowerInvariant();
+
+        if (ext == ".slnx")
+        {
+            return await LoadFromSlnxAsync(path);
+        }
+
         using var workspace = MSBuildWorkspace.Create();
         workspace.WorkspaceFailed += (_, e) =>
             Console.Error.WriteLine($"[workspace] {e.Diagnostic.Kind}: {e.Diagnostic.Message}");
-
-        var ext = Path.GetExtension(path).ToLowerInvariant();
 
         IEnumerable<Document> documents;
         if (ext == ".sln")
@@ -89,6 +95,64 @@ public class ProjectLoader
 
             results.Add((doc.FilePath, syntaxTree, text));
         }
+        return results;
+    }
+
+    /// <summary>
+    /// Parses a .slnx solution filter file, extracts the referenced project paths,
+    /// and loads each project via MSBuildWorkspace.
+    /// </summary>
+    private async Task<List<(string, SyntaxTree, string)>> LoadFromSlnxAsync(string slnxPath)
+    {
+        var slnxDir = Path.GetDirectoryName(Path.GetFullPath(slnxPath)) ?? ".";
+        var xml = XDocument.Load(slnxPath);
+
+        // Collect all <Project Path="..."> elements regardless of nesting depth.
+        var projectPaths = xml.Descendants("Project")
+            .Select(e => e.Attribute("Path")?.Value)
+            .Where(p => !string.IsNullOrWhiteSpace(p))
+            .Select(p => Path.GetFullPath(Path.Combine(slnxDir, p!)))
+            .Where(File.Exists)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (projectPaths.Count == 0)
+        {
+            Console.Error.WriteLine("[warn] No projects found in .slnx file.");
+            return new List<(string, SyntaxTree, string)>();
+        }
+
+        using var workspace = MSBuildWorkspace.Create();
+        workspace.WorkspaceFailed += (_, e) =>
+            Console.Error.WriteLine($"[workspace] {e.Diagnostic.Kind}: {e.Diagnostic.Message}");
+
+        var results = new List<(string, SyntaxTree, string)>();
+        foreach (var projectPath in projectPaths)
+        {
+            try
+            {
+                var project = await workspace.OpenProjectAsync(projectPath);
+                foreach (var doc in project.Documents)
+                {
+                    if (doc.FilePath == null) continue;
+                    if (ShouldExclude(doc.FilePath)) continue;
+
+                    var sourceText = await doc.GetTextAsync();
+                    var syntaxTree = await doc.GetSyntaxTreeAsync();
+                    if (syntaxTree == null) continue;
+
+                    var text = sourceText.ToString();
+                    if (!_options.IncludeGenerated && IsGeneratedFile(doc.FilePath, text)) continue;
+
+                    results.Add((doc.FilePath, syntaxTree, text));
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[warn] Failed to load project '{projectPath}': {ex.Message}");
+            }
+        }
+
         return results;
     }
 

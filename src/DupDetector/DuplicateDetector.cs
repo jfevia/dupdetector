@@ -108,12 +108,19 @@ public class DuplicateDetector
         var spread = instances.Select(b => b.FilePath).Distinct().Count();
         var score = (avgLines * occurrences * spread) / 100.0;
 
+        // Normalized 0–100 score: capped product of block size, spread, and occurrences.
+        // Max bucket: 50 lines × 10 occurrences × 5 files = 2500 → maps to 100.
+        var duplicationScore = Math.Round(
+            Math.Min(100.0, (Math.Min(avgLines, 50) * Math.Min(occurrences, 10) * Math.Min(spread, 5)) / 25.0),
+            2);
+
         var metrics = new ClusterMetrics
         {
             Lines = avgLines,
             Occurrences = occurrences,
             Spread = spread,
-            Score = score
+            Score = score,
+            DuplicationScore = duplicationScore
         };
 
         return new DuplicateCluster
