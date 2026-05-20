@@ -159,6 +159,9 @@ public class ProjectLoader
             }
             catch (Exception ex)
             {
+                // Suppress transitive-reference duplicate exceptions — same as the WorkspaceFailed handler above.
+                if (ex.Message.Contains("already part of the workspace", StringComparison.OrdinalIgnoreCase))
+                    continue;
                 Console.Error.WriteLine($"[warn] Failed to load project '{projectPath}': {ex.Message}");
             }
         }

@@ -4,10 +4,9 @@ using Xunit;
 namespace DupDetector.Tests;
 
 /// <summary>
-/// Tests that verify the improved cluster scoring formula (GAP-4).
-/// The formula was changed from <c>min(100, (min(lines,50)×min(occ,10)×min(spread,5))/25)</c>
-/// to <c>min(100, (min(lines,50)×min(occ,25)×min(spread,10))/50)</c> to provide meaningful
-/// differentiation for clusters that previously all saturated at 100.
+/// Tests that verify the improved cluster scoring formula (GAP-4, updated in Run 3).
+/// Run 2: <c>min(100, (min(lines,50)×min(occ,25)×min(spread,10))/50)</c> — saturated at 100 too early.
+/// Run 3: <c>min(100, (min(lines,50)×min(occ,25)×min(spread,10))/125)</c> — only max cluster scores 100.
 /// </summary>
 public class ScoringFormulaTests
 {
@@ -113,12 +112,12 @@ public class ScoringFormulaTests
             $"More occurrences ({cluster15.Metrics.DuplicationScore}) should score >= fewer ({cluster5.Metrics.DuplicationScore})");
     }
 
-    // ──── Large cluster (report: dup-69393cb9 scenario) should score 100 ─────
+    // ──── Large cluster (report: dup-69393cb9 scenario) ─────────────────────
 
     [Fact]
     public void LargeCluster_50Lines_25Occ_7Spread_ScoresHigh()
     {
-        // (26 lines, 25 occ, 7 files): min(26,50)*min(25,25)*min(7,10)/50 = 26*25*7/50 = 91
+        // (26 lines, 25 occ, 7 files): min(26,50)*min(25,25)*min(7,10)/125 = 26*25*7/125 = 36.4
         var code = Make50LineMethod("GameSetup");
         var blocks = Enumerable.Range(0, 25)
             .Select(i => MakeBlock(code, $"testfile{i % 7}.cs", 1 + i * 30, 26 + i * 30))
@@ -128,8 +127,8 @@ public class ScoringFormulaTests
         Assert.True(clusters.Count > 0);
 
         var top = clusters[0];
-        Assert.True(top.Metrics.DuplicationScore >= 80.0,
-            $"Large cluster should score >= 80, got {top.Metrics.DuplicationScore}");
+        Assert.True(top.Metrics.DuplicationScore >= 25.0,
+            $"Large cluster should score >= 25, got {top.Metrics.DuplicationScore}");
     }
 
     // ──── Small cluster should NOT score 100 ────────────────────────────────
@@ -137,7 +136,7 @@ public class ScoringFormulaTests
     [Fact]
     public void SmallCluster_10Occ_5Files_DoesNotScore100()
     {
-        // (50 lines, 10 occ, 5 files): min(50,50)*min(10,25)*min(5,10)/50 = 50*10*5/50 = 50
+        // (26 lines, 10 occ, 5 files): min(26,50)*min(10,25)*min(5,10)/125 = 26*10*5/125 = 10.4
         var code = Make50LineMethod("SmallWork");
         var blocks = Enumerable.Range(0, 10)
             .Select(i => MakeBlock(code, $"small{i % 5}.cs", 1 + i * 30, 26 + i * 30))
@@ -154,22 +153,20 @@ public class ScoringFormulaTests
     // ──── Formula values match expected calculation ───────────────────────────
 
     [Theory]
-    [InlineData(50, 25, 7, 100.0)]  // min(50,50)*min(25,25)*min(7,10)/50 = 8750/50 = 175 → 100
-    [InlineData(50, 10, 5, 50.0)]   // min(50,50)*min(10,25)*min(5,10)/50 = 2500/50 = 50
-    [InlineData(23, 6, 6, 16.56)]   // min(23,50)*min(6,25)*min(6,10)/50 = 828/50 = 16.56
-    [InlineData(5, 5, 5, 2.5)]      // min(5,50)*min(5,25)*min(5,10)/50 = 125/50 = 2.5
+    [InlineData(50, 25, 7, 70.0)]   // min(50,50)*min(25,25)*min(7,10)/125 = 8750/125 = 70
+    [InlineData(50, 10, 5, 20.0)]   // min(50,50)*min(10,25)*min(5,10)/125 = 2500/125 = 20
+    [InlineData(23, 6, 6, 6.62)]    // min(23,50)*min(6,25)*min(6,10)/125 = 828/125 = 6.624 → 6.62
+    [InlineData(5, 5, 5, 1.0)]      // min(5,50)*min(5,25)*min(5,10)/125 = 125/125 = 1
     public void DuplicationScore_Formula_MatchesExpectedValue(
         int lines, int occ, int spread, double expectedScore)
     {
-        // Build ClusterMetrics directly using reflection to test the formula
-        // by constructing a fake cluster and checking DuplicationScore
         var avgLines = lines;
         var occurrences = occ;
         var fileSpread = spread;
 
         var actual = Math.Round(
             Math.Min(100.0,
-                (Math.Min(avgLines, 50) * Math.Min(occurrences, 25) * Math.Min(fileSpread, 10)) / 50.0),
+                (Math.Min(avgLines, 50) * Math.Min(occurrences, 25) * Math.Min(fileSpread, 10)) / 125.0),
             2);
 
         Assert.Equal(expectedScore, actual, precision: 1);
@@ -180,8 +177,8 @@ public class ScoringFormulaTests
     [Fact]
     public void MaximumCluster_ScoresExactly100()
     {
-        // (50, 25+, 10+) → always 100
-        var actual = Math.Min(100.0, Math.Min(50, 50) * Math.Min(25, 25) * Math.Min(10, 10) / 50.0);
+        // (50, 25+, 10+) → always 100: 50*25*10/125 = 12500/125 = 100
+        var actual = Math.Min(100.0, Math.Min(50, 50) * Math.Min(25, 25) * Math.Min(10, 10) / 125.0);
         Assert.Equal(100.0, actual, precision: 0);
     }
 
@@ -193,7 +190,7 @@ public class ScoringFormulaTests
         double prev = 0;
         foreach (var lines in new[] { 5, 10, 20, 30, 40, 50 })
         {
-            var score = Math.Min(100.0, Math.Min(lines, 50) * Math.Min(5, 25) * Math.Min(3, 10) / 50.0);
+            var score = Math.Min(100.0, Math.Min(lines, 50) * Math.Min(5, 25) * Math.Min(3, 10) / 125.0);
             Assert.True(score >= prev, $"Score should not decrease: lines={lines}, score={score}, prev={prev}");
             prev = score;
         }
@@ -205,7 +202,7 @@ public class ScoringFormulaTests
         double prev = 0;
         foreach (var occ in new[] { 2, 5, 10, 15, 25, 50 })
         {
-            var score = Math.Min(100.0, Math.Min(20, 50) * Math.Min(occ, 25) * Math.Min(5, 10) / 50.0);
+            var score = Math.Min(100.0, Math.Min(20, 50) * Math.Min(occ, 25) * Math.Min(5, 10) / 125.0);
             Assert.True(score >= prev, $"Score should not decrease: occ={occ}, score={score}, prev={prev}");
             prev = score;
         }
@@ -217,7 +214,7 @@ public class ScoringFormulaTests
         double prev = 0;
         foreach (var spread in new[] { 1, 2, 4, 6, 8, 10, 20 })
         {
-            var score = Math.Min(100.0, Math.Min(20, 50) * Math.Min(8, 25) * Math.Min(spread, 10) / 50.0);
+            var score = Math.Min(100.0, Math.Min(20, 50) * Math.Min(8, 25) * Math.Min(spread, 10) / 125.0);
             Assert.True(score >= prev, $"Score should not decrease: spread={spread}, score={score}, prev={prev}");
             prev = score;
         }

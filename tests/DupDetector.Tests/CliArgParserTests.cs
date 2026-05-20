@@ -20,7 +20,8 @@ public class CliArgParserTests
         Assert.Equal(0.90, opts.Similarity, precision: 2);
         Assert.Equal("yaml", opts.Format);
         Assert.Equal(DetectionKind.All, opts.DetectionKinds);
-        Assert.Equal(1, opts.MinClusterSpread);
+        Assert.Equal(2, opts.MinClusterSpread);
+        Assert.Equal(1, opts.MinProjectSpread);
         Assert.Equal(20, opts.MaxClusterSpread);
         Assert.Equal(50, opts.MaxClusterOccurrences);
         Assert.False(opts.IncludeGenerated);
@@ -184,10 +185,10 @@ public class CliArgParserTests
     // ──── --min-cluster-spread flag (GAP-2/3) ─────────────────────────────────
 
     [Fact]
-    public void MinClusterSpreadDefault_IsOne()
+    public void MinClusterSpreadDefault_IsTwo()
     {
         var opts = CliArgParser.Parse(["path.sln"]);
-        Assert.Equal(1, opts.MinClusterSpread);
+        Assert.Equal(2, opts.MinClusterSpread);
     }
 
     [Fact]

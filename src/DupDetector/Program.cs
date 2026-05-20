@@ -17,7 +17,8 @@ if (options.InputPaths.Count == 0)
     Console.Error.WriteLine("  --include-generated                 Include auto-generated files");
     Console.Error.WriteLine("  --detect <kinds>                    Comma-separated kinds: methods,constructors,local-functions,windows (default: all without windows)");
     Console.Error.WriteLine("  --max-cluster-spread <int>          Discard near-dup clusters with spread above this (default: 20, 0=unlimited)");
-    Console.Error.WriteLine("  --min-cluster-spread <int>          Discard clusters with spread below this (default: 1). Set to 2 to suppress same-file clusters");
+    Console.Error.WriteLine("  --min-cluster-spread <int>          Discard clusters with file spread below this (default: 2). Set to 1 to include same-file clusters");
+    Console.Error.WriteLine("  --min-project-spread <int>          Discard clusters with project spread below this (default: 1). Set to 2 to suppress intra-project clusters");
     Console.Error.WriteLine("  --max-cluster-occurrences <int>     Discard near-dup clusters with occurrences above this (default: 50, 0=unlimited)");
     Console.Error.WriteLine("  --exclude-test-files                Omit test files from file/project score output");
     return 1;
@@ -44,13 +45,13 @@ try
     var allBlocks = new List<CodeBlock>();
     foreach (var doc in documents)
     {
-        var blocks = extractor.Extract(doc.FilePath, doc.SyntaxTree, doc.SourceText, options.MinLines, options.DetectionKinds);
+        var blocks = extractor.Extract(doc.FilePath, doc.SyntaxTree, doc.SourceText, options.MinLines, options.DetectionKinds, doc.ProjectName);
         allBlocks.AddRange(blocks);
     }
 
     // 3. Detect duplicates
     var detector = new DuplicateDetector();
-    var clusters = detector.Detect(allBlocks, options.Similarity, options.MaxClusterSpread, options.MaxClusterOccurrences, options.MinClusterSpread);
+    var clusters = detector.Detect(allBlocks, options.Similarity, options.MaxClusterSpread, options.MaxClusterOccurrences, options.MinClusterSpread, options.MinProjectSpread);
 
     // 4. Build file-level line counts
     var fileLineCounts = documents

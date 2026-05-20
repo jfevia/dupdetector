@@ -14,7 +14,14 @@ public record CodeBlock(
     string NormalizedText,
     string RawText,
     int LineCount
-);
+)
+{
+    /// <summary>
+    /// The name of the project this block belongs to. Set by the caller after extraction.
+    /// Defaults to empty string when project information is unavailable.
+    /// </summary>
+    public string ProjectName { get; init; } = "";
+}
 
 /// <summary>
 /// Extracts method-level and (optionally) sub-method code blocks from C# syntax trees.
@@ -23,7 +30,7 @@ public class FeatureExtractor
 {
     private readonly CodeNormalizer _normalizer = new();
 
-    public List<CodeBlock> Extract(string filePath, SyntaxTree syntaxTree, string sourceText, int minLines, DetectionKind kinds = DetectionKind.All)
+    public List<CodeBlock> Extract(string filePath, SyntaxTree syntaxTree, string sourceText, int minLines, DetectionKind kinds = DetectionKind.All, string projectName = "")
     {
         var root = syntaxTree.GetRoot();
         var blocks = new List<CodeBlock>();
@@ -54,7 +61,7 @@ public class FeatureExtractor
             var hash = _normalizer.GetStructuralHash(node);
             var normalizedText = _normalizer.Normalize(node);
 
-            blocks.Add(new CodeBlock(filePath, startLine, endLine, methodName, hash, normalizedText, rawText, lineCount));
+            blocks.Add(new CodeBlock(filePath, startLine, endLine, methodName, hash, normalizedText, rawText, lineCount) { ProjectName = projectName });
 
             // Sliding window sub-method blocks are gated behind DetectionKind.Windows.
             // They are disabled by default because they produce a very high false-positive
@@ -65,7 +72,7 @@ public class FeatureExtractor
                 var body = GetBody(node);
                 if (body != null)
                 {
-                    var stmtBlocks = ExtractSlidingWindowBlocks(filePath, body, sourceText, minLines);
+                    var stmtBlocks = ExtractSlidingWindowBlocks(filePath, body, sourceText, minLines, projectName);
                     blocks.AddRange(stmtBlocks);
                 }
             }
@@ -74,7 +81,7 @@ public class FeatureExtractor
         return blocks;
     }
 
-    private List<CodeBlock> ExtractSlidingWindowBlocks(string filePath, BlockSyntax body, string sourceText, int minLines)
+    private List<CodeBlock> ExtractSlidingWindowBlocks(string filePath, BlockSyntax body, string sourceText, int minLines, string projectName = "")
     {
         var statements = body.Statements;
         if (statements.Count < minLines) return new List<CodeBlock>();
@@ -100,7 +107,7 @@ public class FeatureExtractor
             var hash = _normalizer.GetStructuralHash(syntheticBlock);
             var normalizedText = _normalizer.Normalize(syntheticBlock);
 
-            results.Add(new CodeBlock(filePath, startLine, endLine, $"<window@{startLine}>", hash, normalizedText, rawText, lineCount));
+            results.Add(new CodeBlock(filePath, startLine, endLine, $"<window@{startLine}>", hash, normalizedText, rawText, lineCount) { ProjectName = projectName });
         }
 
         return results;

@@ -16,10 +16,11 @@ public class DetectionOptions
     public string OutputPath { get; set; } = "";
     /// <summary>
     /// Discard clusters whose file spread is below this value.
-    /// Default: 1 (keep all clusters). Set to 2 to suppress same-file clusters,
-    /// which are often intentional patterns in test or architecture projects.
+    /// Default: 2 (suppress same-file clusters). Set to 1 to include same-file clusters.
+    /// Same-file clusters are rarely actionable refactoring targets — they typically represent
+    /// intentional test patterns (one test class per case) or parameterized-test candidates.
     /// </summary>
-    public int MinClusterSpread { get; set; } = 1;
+    public int MinClusterSpread { get; set; } = 2;
     /// <summary>
     /// Discard near-duplicate clusters whose file spread exceeds this value.
     /// Prevents generic structural patterns from forming mega-clusters.
@@ -31,6 +32,13 @@ public class DetectionOptions
     /// Default: 50. Set to 0 to disable filtering.
     /// </summary>
     public int MaxClusterOccurrences { get; set; } = 50;
+    /// <summary>
+    /// Discard clusters whose project spread is below this value.
+    /// Default: 1 (keep all clusters). Set to 2 to suppress clusters where all instances
+    /// are within the same project — useful for filtering intra-project test boilerplate
+    /// that dominates project scores but is not a cross-project refactoring target.
+    /// </summary>
+    public int MinProjectSpread { get; set; } = 1;
     /// <summary>
     /// When true, test files are excluded from fileScores and projectScores output.
     /// Test files are identified by path heuristics (contains /Tests/, /Test/, /Specs/, etc.).
