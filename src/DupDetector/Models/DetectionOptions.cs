@@ -45,4 +45,12 @@ public class DetectionOptions
     /// Test files are identified by path heuristics (contains /Tests/, /Test/, /Specs/, etc.).
     /// </summary>
     public bool ExcludeTestFiles { get; set; } = false;
+    /// <summary>
+    /// Case-insensitive substring patterns applied to cluster raw snippets after detection.
+    /// Any cluster where at least one raw snippet contains one of these patterns is removed from output.
+    /// Useful for suppressing framework boilerplate that cannot be avoided
+    /// (e.g., <c>--exclude-pattern "IArchRule"</c> for ArchUnitNET test patterns).
+    /// Multiple patterns are OR-combined — a cluster matching any pattern is excluded.
+    /// </summary>
+    public List<string> ExcludePatterns { get; set; } = new();
 }

@@ -280,4 +280,41 @@ public class CliArgParserTests
         Assert.Equal(20, opts.MaxClusterSpread);
         Assert.Equal(50, opts.MaxClusterOccurrences);
     }
+
+    // ──── --exclude-pattern flag (GAP-A, Run 5) ──────────────────────────────
+
+    [Fact]
+    public void ExcludePatterns_Default_IsEmpty()
+    {
+        var opts = CliArgParser.Parse(["path.sln"]);
+        Assert.Empty(opts.ExcludePatterns);
+    }
+
+    [Fact]
+    public void ExcludePatternFlag_SingleValue_IsParsed()
+    {
+        var opts = CliArgParser.Parse(["path.sln", "--exclude-pattern", "IArchRule"]);
+        Assert.Single(opts.ExcludePatterns);
+        Assert.Equal("IArchRule", opts.ExcludePatterns[0]);
+    }
+
+    [Fact]
+    public void ExcludePatternFlag_IsRepeatable()
+    {
+        var opts = CliArgParser.Parse([
+            "path.sln",
+            "--exclude-pattern", "IArchRule",
+            "--exclude-pattern", "SomeBoilerplate"
+        ]);
+        Assert.Equal(2, opts.ExcludePatterns.Count);
+        Assert.Contains("IArchRule", opts.ExcludePatterns);
+        Assert.Contains("SomeBoilerplate", opts.ExcludePatterns);
+    }
+
+    [Fact]
+    public void ExcludePatternFlag_PreservesWhitespaceAndCase()
+    {
+        var opts = CliArgParser.Parse(["path.sln", "--exclude-pattern", "  MyPattern  "]);
+        Assert.Equal("  MyPattern  ", opts.ExcludePatterns[0]);
+    }
 }

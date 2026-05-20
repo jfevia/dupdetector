@@ -21,6 +21,7 @@ if (options.InputPaths.Count == 0)
     Console.Error.WriteLine("  --min-project-spread <int>          Discard clusters with project spread below this (default: 1). Set to 2 to suppress intra-project clusters");
     Console.Error.WriteLine("  --max-cluster-occurrences <int>     Discard near-dup clusters with occurrences above this (default: 50, 0=unlimited)");
     Console.Error.WriteLine("  --exclude-test-files                Omit test files from file/project score output");
+    Console.Error.WriteLine("  --exclude-pattern <text>            Remove clusters whose normalized snippet contains this text, case-insensitive (repeatable)");
     return 1;
 }
 
@@ -53,6 +54,15 @@ try
     var detector = new DuplicateDetector();
     var clusters = detector.Detect(allBlocks, options.Similarity, options.MaxClusterSpread, options.MaxClusterOccurrences, options.MinClusterSpread, options.MinProjectSpread);
 
+    // Apply --exclude-pattern filters (case-insensitive substring match against raw snippet text).
+    if (options.ExcludePatterns.Count > 0)
+    {
+        clusters = clusters
+            .Where(c => !options.ExcludePatterns.Any(p =>
+                c.RawSnippets.Any(raw => raw.Contains(p, StringComparison.OrdinalIgnoreCase))))
+            .ToList();
+    }
+
     // 4. Build file-level line counts
     var fileLineCounts = documents
         .GroupBy(d => d.FilePath)
@@ -81,18 +91,38 @@ try
         kv => LineCountHelper.CountUniqueLines(kv.Value),
         StringComparer.OrdinalIgnoreCase);
 
+    // Build per-file cluster lookup for ClusterCount and TopClusterSpread (GAP-J fix).
+    var fileClusters = new Dictionary<string, List<DuplicateCluster>>(StringComparer.OrdinalIgnoreCase);
+    foreach (var cluster in clusters)
+    {
+        foreach (var inst in cluster.Instances)
+        {
+            if (!fileClusters.TryGetValue(inst.File, out var fc))
+            {
+                fc = new List<DuplicateCluster>();
+                fileClusters[inst.File] = fc;
+            }
+            if (!fc.Contains(cluster))
+                fc.Add(cluster);
+        }
+    }
+
     var fileScores = fileLineCounts
         .Select(kv =>
         {
             fileDuplicateLines.TryGetValue(kv.Key, out var dupLines);
             var score = kv.Value > 0 ? Math.Round(Math.Min(100.0, dupLines * 100.0 / kv.Value), 2) : 0.0;
+            fileClusters.TryGetValue(kv.Key, out var clusterList);
+            clusterList ??= new List<DuplicateCluster>();
             return new FileScore
             {
                 File = kv.Key,
                 DuplicateLines = dupLines,
                 TotalLines = kv.Value,
                 Score = score,
-                IsTestFile = TestFileHelper.IsTestFile(kv.Key)
+                IsTestFile = TestFileHelper.IsTestFile(kv.Key),
+                ClusterCount = clusterList.Count,
+                TopClusterSpread = clusterList.Count > 0 ? clusterList.Max(c => c.Metrics.Spread) : 0
             };
         })
         .Where(f => !options.ExcludeTestFiles || !f.IsTestFile)

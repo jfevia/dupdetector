@@ -246,4 +246,167 @@ public class ExactDuplicateFlagTests
 
         Assert.Contains("isHighImpact:", yaml, StringComparison.Ordinal);
     }
+
+    // ──── IsProductionDuplicate (Run 5, GAP-I) ────────────────────────────────
+
+    [Fact]
+    public void ExactDuplicate_TwoNonTestFiles_IsProductionDuplicate_IsTrue()
+    {
+        var code = """
+            void Build() {
+                var svc = new ServiceCollection();
+                svc.AddSingleton<ILogger, Logger>();
+                svc.AddSingleton<IApp, App>();
+                return svc.BuildServiceProvider();
+            }
+            """;
+        // Two production (non-test) files in different projects
+        var b1 = MakeBlock(code, @"src\ProjectA\Host.cs");
+        var b2 = MakeBlock(code, @"src\ProjectB\Host.cs");
+
+        var clusters = _detector.Detect(new List<CodeBlock> { b1, b2 }, similarityThreshold: 0.99,
+            minClusterSpread: 1, minProjectSpread: 1);
+
+        Assert.Single(clusters);
+        var c = clusters[0];
+        Assert.True(c.IsExact);
+        Assert.True(c.IsProductionDuplicate,
+            "Exact cluster with non-test files and projectSpread >= 2 should be IsProductionDuplicate=true");
+    }
+
+    [Fact]
+    public void ExactDuplicate_TestFilesOnly_IsProductionDuplicate_IsFalse()
+    {
+        var code = """
+            void SetupTest() {
+                var svc = new ServiceCollection();
+                svc.AddSingleton<ILogger, Logger>();
+                svc.AddSingleton<IApp, App>();
+                return svc.BuildServiceProvider();
+            }
+            """;
+        // Two test files
+        var b1 = MakeBlock(code, @"tests\ProjectA.Tests\HostTests.cs");
+        var b2 = MakeBlock(code, @"tests\ProjectB.Tests\HostTests.cs");
+
+        var clusters = _detector.Detect(new List<CodeBlock> { b1, b2 }, similarityThreshold: 0.99,
+            minClusterSpread: 1, minProjectSpread: 1);
+
+        Assert.Single(clusters);
+        var c = clusters[0];
+        Assert.True(c.IsExact);
+        Assert.False(c.IsProductionDuplicate,
+            "Cluster where all instances are in test files should not be IsProductionDuplicate");
+    }
+
+    [Fact]
+    public void ExactDuplicate_MixedTestAndProductionFiles_IsProductionDuplicate_IsTrue()
+    {
+        var code = """
+            void Configure() {
+                var svc = new ServiceCollection();
+                svc.AddLogging();
+                svc.AddSingleton<IApp, App>();
+                svc.AddSingleton<IDb, Db>();
+                return svc.BuildServiceProvider();
+            }
+            """;
+        // One test, one production file
+        var b1 = MakeBlock(code, @"tests\ProjectA.Tests\HostTests.cs");
+        var b2 = MakeBlock(code, @"src\ProjectB\Host.cs");
+
+        var clusters = _detector.Detect(new List<CodeBlock> { b1, b2 }, similarityThreshold: 0.99,
+            minClusterSpread: 1, minProjectSpread: 1);
+
+        Assert.Single(clusters);
+        var c = clusters[0];
+        Assert.True(c.IsExact);
+        Assert.True(c.IsProductionDuplicate,
+            "Cluster with at least one non-test file and projectSpread >= 2 should be IsProductionDuplicate=true");
+    }
+
+    [Fact]
+    public void ExactDuplicate_SameProject_IsProductionDuplicate_IsFalse()
+    {
+        var code = """
+            void BuildHost() {
+                var svc = new ServiceCollection();
+                svc.AddLogging();
+                svc.AddSingleton<IApp, App>();
+                return svc.BuildServiceProvider();
+            }
+            """;
+        var tree = CSharpSyntaxTree.ParseText(code);
+        var root = tree.GetRoot();
+        var hash = _normalizer.GetStructuralHash(root);
+        var normalized = _normalizer.Normalize(root);
+
+        // Two files from same project (ProjectName = "ProjectA" for both)
+        var b1 = new CodeBlock(@"src\ProjectA\HostA.cs", 1, 7, "BuildHost", hash, normalized, code, 7) { ProjectName = "ProjectA" };
+        var b2 = new CodeBlock(@"src\ProjectA\HostB.cs", 1, 7, "BuildHost", hash, normalized, code, 7) { ProjectName = "ProjectA" };
+
+        var clusters = _detector.Detect(new List<CodeBlock> { b1, b2 }, similarityThreshold: 0.99,
+            minClusterSpread: 1, minProjectSpread: 1);
+
+        Assert.Single(clusters);
+        var c = clusters[0];
+        Assert.True(c.IsExact);
+        Assert.False(c.IsProductionDuplicate,
+            "Intra-project cluster (projectSpread=1) should not be IsProductionDuplicate");
+    }
+
+    [Fact]
+    public void NearDuplicate_NonTestFiles_IsProductionDuplicate_IsFalse()
+    {
+        // Near-duplicates are never production duplicates — flag is IsExact-only
+        var code1 = """
+            void Configure() {
+                var aaa = GetService();
+                var bbb = aaa.Build();
+                var ccc = bbb.Run();
+                var ddd = ccc.Start();
+                return ddd;
+            }
+            """;
+        var code2 = """
+            void Configure() {
+                var xxx = GetService();
+                var yyy = xxx.Build();
+                var zzz = yyy.Run();
+                var www = zzz.Start();
+                return www;
+            }
+            """;
+        var b1 = MakeBlock(code1, @"src\ProjectA\Host.cs");
+        var b2 = MakeBlock(code2, @"src\ProjectB\Host.cs");
+
+        var clusters = _detector.Detect(new List<CodeBlock> { b1, b2 }, similarityThreshold: 0.5,
+            minClusterSpread: 1, minProjectSpread: 1);
+
+        foreach (var c in clusters.Where(c => !c.IsExact))
+            Assert.False(c.IsProductionDuplicate, "Near-duplicate clusters must never be IsProductionDuplicate=true");
+    }
+
+    [Fact]
+    public void IsProductionDuplicate_AppearsInYamlOutput()
+    {
+        var code = """
+            void ProduceBuild() {
+                var svc = new ServiceCollection();
+                svc.AddLogging();
+                svc.AddSingleton<IApp, App>();
+                return svc.BuildServiceProvider();
+            }
+            """;
+        var b1 = MakeBlock(code, @"src\ProjectA\Host.cs");
+        var b2 = MakeBlock(code, @"src\ProjectB\Host.cs");
+
+        var clusters = _detector.Detect(new List<CodeBlock> { b1, b2 }, similarityThreshold: 0.99,
+            minClusterSpread: 1, minProjectSpread: 1);
+
+        var report = new DetectionReport { Clusters = clusters };
+        var yaml = new Reporter().Render(report, "yaml");
+
+        Assert.Contains("isProductionDuplicate:", yaml, StringComparison.Ordinal);
+    }
 }

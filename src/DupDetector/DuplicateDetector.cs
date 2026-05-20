@@ -176,7 +176,8 @@ public class DuplicateDetector
             NormalizedSnippet = instances[0].NormalizedText,
             RawSnippets = instances.Select(b => b.RawText).ToList(),
             IsExact = isExact,
-            IsHighImpact = isExact && (avgLines * spread >= 100)
+            IsHighImpact = isExact && (avgLines * spread >= 100),
+            IsProductionDuplicate = isExact && projectSpread >= 2 && instances.Any(b => !TestFileHelper.IsTestFile(b.FilePath))
         };
     }
 

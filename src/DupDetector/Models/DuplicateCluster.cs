@@ -19,4 +19,12 @@ public class DuplicateCluster
     /// even though it only appears twice.
     /// </summary>
     public bool IsHighImpact { get; set; }
+    /// <summary>
+    /// True when this is a verbatim exact-match cluster spanning at least 2 distinct projects
+    /// and at least one instance is in a production (non-test) file.
+    /// Production source duplicates are always high-priority regardless of line count or
+    /// occurrence count, since copy-pasted production code creates maintenance debt that
+    /// cannot be dismissed as intentional test boilerplate.
+    /// </summary>
+    public bool IsProductionDuplicate { get; set; }
 }

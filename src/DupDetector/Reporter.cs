@@ -220,6 +220,7 @@ const PS={{projectScoresJson}};
     .tag.oc{background:#3b1f2f;color:#f9a8d4}
     .tag.hi{background:#7c2d12;color:#fed7aa}
     .tag.ex{background:#14532d;color:#86efac}
+    .tag.pd{background:#4c1d95;color:#ddd6fe}
     .tag.tf{background:#2d1a4a;color:#d8b4fe}
     .sr{display:flex;gap:.75rem;margin-bottom:1rem;align-items:center}
     .sr input{flex:1;background:#1e293b;border:1px solid #334155;border-radius:.5rem;padding:.5rem .75rem;color:#e2e8f0;font-size:.85rem;outline:none}
@@ -301,7 +302,7 @@ function sf(p){const a=p.replace(/\\/g,'/').split('/');return a.length>3?'…/'+
   if(!top.length){el.innerHTML='<p style="color:#64748b">No project data.</p>';return;}
   el.innerHTML=top.map(p=>`<div class="bar-row" title="${esc(p.project)}"><span class="fname">${esc(sf(p.project))}</span><div class="bar-track"><div class="bar-fill" style="width:${p.score}%;background:${sc(p.score)}"></div></div><span class="pct">${p.score.toFixed(1)}%</span></div>`).join('');
 })();
-let td2=CL.map(c=>({id:c.id,score:c.metrics.score,lines:c.metrics.lines,occ:c.metrics.occurrences,spread:c.metrics.spread,isExact:c.isExact,isHighImpact:c.isHighImpact,files:c.instances.map(i=>i.file),instances:c.instances}));
+let td2=CL.map(c=>({id:c.id,score:c.metrics.score,lines:c.metrics.lines,occ:c.metrics.occurrences,spread:c.metrics.spread,isExact:c.isExact,isHighImpact:c.isHighImpact,isProductionDuplicate:c.isProductionDuplicate,files:c.instances.map(i=>i.file),instances:c.instances}));
 let sc2='score',sa=false;
 function rt(data){
   const tb=document.getElementById('ctb');
@@ -334,7 +335,7 @@ refresh2();
     const inner=cids.map(cid=>{
       const c=items.find(i=>i.cluster.id===cid).cluster;
       const insts=c.instances.filter(i=>i.file===file);
-      return `<div class="tn" id="tree-${esc(cid)}"><div class="tt" onclick="tog(this)"><span class="arr">&#9658;</span><span class="mono">${esc(cid)}</span><span class="tag" style="margin-left:auto">score ${c.metrics.score.toFixed(2)}</span>${c.isHighImpact?'<span class="tag hi">⚠ HIGH IMPACT</span>':''}${c.isExact?'<span class="tag ex">EXACT</span>':''}<span class="tag oc">${c.metrics.occurrences}&times;</span><span class="tag sp">${c.metrics.lines} lines</span></div><div class="tc">${insts.map(inst=>`<div class="ir"><span class="ifl">${esc(sf(inst.file))}</span><span class="iln">lines ${inst.startLine}&ndash;${inst.endLine}</span><span class="tag">${esc(inst.method)}</span></div>`).join('')}<div class="sb"><pre>${esc(c.normalizedSnippet.slice(0,800))}</pre></div></div></div>`;
+      return `<div class="tn" id="tree-${esc(cid)}"><div class="tt" onclick="tog(this)"><span class="arr">&#9658;</span><span class="mono">${esc(cid)}</span><span class="tag" style="margin-left:auto">score ${c.metrics.score.toFixed(2)}</span>${c.isHighImpact?'<span class="tag hi">⚠ HIGH IMPACT</span>':''}${c.isProductionDuplicate?'<span class="tag pd">⚡ PROD DUP</span>':''}${c.isExact?'<span class="tag ex">EXACT</span>':''}<span class="tag oc">${c.metrics.occurrences}&times;</span><span class="tag sp">${c.metrics.lines} lines</span></div><div class="tc">${insts.map(inst=>`<div class="ir"><span class="ifl">${esc(sf(inst.file))}</span><span class="iln">lines ${inst.startLine}&ndash;${inst.endLine}</span><span class="tag">${esc(inst.method)}</span></div>`).join('')}<div class="sb"><pre>${esc(c.normalizedSnippet.slice(0,800))}</pre></div></div></div>`;
     }).join('');
     return `<div class="tn"><div class="tt" onclick="tog(this)"><span class="arr">&#9658;</span><span style="color:#7dd3fc;font-family:monospace;font-size:.8rem">${esc(sf(file))}</span><span class="tag" style="margin-left:auto">${cids.length} cluster${cids.length>1?'s':''}</span></div><div class="tc">${inner}</div></div>`;
   }).join('');
