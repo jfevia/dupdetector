@@ -19,4 +19,10 @@
         <PackageReference Include="Microsoft.CodeAnalysis.Workspaces.MSBuild" />
     </ItemGroup>
 
+    <ItemGroup>
+        <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+            <_Parameter1>DupDetector.Tests</_Parameter1>
+        </AssemblyAttribute>
+    </ItemGroup>
+
 </Project>

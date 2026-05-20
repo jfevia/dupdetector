@@ -46,7 +46,7 @@ public class ReporterTests
                         Lines = 10,
                         Occurrences = 2,
                         Spread = 2,
-                        Score = 0.4
+                        RawScore = 0.4
                     },
                     NormalizedSnippet = "void var0 () { }",
                     RawSnippets = new List<string> { "void DoWork() { }", "void DoWork() { }" }
@@ -146,6 +146,33 @@ public class ReporterTests
         Assert.Contains("totalDuplicates:", output);
         Assert.Contains("clusters:", output);
     }
+
+    [Fact]
+    public void JsonOutput_FileScores_IncludeIsTestFileField()
+    {
+        var report = MakeSampleReport();
+        report.FileScores = new List<FileScore>
+        {
+            new FileScore { File = "tests/Foo/BarTests.cs", DuplicateLines = 5, TotalLines = 20, Score = 25.0, IsTestFile = true },
+            new FileScore { File = "src/Core/Baz.cs", DuplicateLines = 2, TotalLines = 30, Score = 6.67, IsTestFile = false }
+        };
+        var output = _reporter.Render(report, "json");
+
+        Assert.Contains("isTestFile", output);
+    }
+
+    [Fact]
+    public void YamlOutput_FileScores_IncludeIsTestFileField()
+    {
+        var report = MakeSampleReport();
+        report.FileScores = new List<FileScore>
+        {
+            new FileScore { File = "tests/Foo/BarTests.cs", DuplicateLines = 5, TotalLines = 20, Score = 25.0, IsTestFile = true }
+        };
+        var output = _reporter.Render(report, "yaml");
+
+        Assert.Contains("isTestFile:", output);
+    }
 }
 
 // Tests for new features
@@ -176,7 +203,7 @@ public class ReporterHtmlTests
                         new CodeInstance { File = "A.cs", StartLine = 1, EndLine = 10, Method = "M", Hash = "aabb" },
                         new CodeInstance { File = "B.cs", StartLine = 5, EndLine = 14, Method = "M", Hash = "aabb" }
                     },
-                    Metrics = new ClusterMetrics { Lines = 10, Occurrences = 2, Spread = 2, Score = 0.4, DuplicationScore = 1.6 },
+                    Metrics = new ClusterMetrics { Lines = 10, Occurrences = 2, Spread = 2, RawScore = 0.4, Score = 1.6 },
                     NormalizedSnippet = "void var0() { }",
                     RawSnippets = new List<string> { "void M() { }", "void M() { }" }
                 }
@@ -221,7 +248,7 @@ public class ReporterHtmlTests
         var output = _reporter.Render(report, "html");
 
         Assert.Contains("dup-html0001", output, StringComparison.Ordinal);
-        Assert.Contains("duplicationScore", output, StringComparison.Ordinal);
+        Assert.Contains("rawScore", output, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -264,14 +291,15 @@ public class ReporterHtmlTests
     }
 
     [Fact]
-    public void ClusterMetrics_ContainsDuplicationScore()
+    public void ClusterMetrics_ContainsScore()
     {
         var report = MakeSampleReport();
         var output = _reporter.Render(report, "json");
 
         var doc = System.Text.Json.JsonDocument.Parse(output);
         var metrics = doc.RootElement.GetProperty("clusters")[0].GetProperty("metrics");
-        Assert.True(metrics.TryGetProperty("duplicationScore", out _));
+        Assert.True(metrics.TryGetProperty("score", out _));
+        Assert.True(metrics.TryGetProperty("rawScore", out _));
     }
 
     [Fact]
@@ -284,6 +312,38 @@ public class ReporterHtmlTests
         Assert.Contains("scoreLabel:", output, StringComparison.Ordinal);
         Assert.Contains("fileScores:", output, StringComparison.Ordinal);
         Assert.Contains("projectScores:", output, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void HtmlOutput_ContainsTestFileBadge_ForTestFiles()
+    {
+        var report = MakeSampleReport();
+        report.FileScores = new List<FileScore>
+        {
+            new FileScore { File = "tests/FooTests.cs", DuplicateLines = 10, TotalLines = 40, Score = 25.0, IsTestFile = true },
+            new FileScore { File = "src/Foo.cs", DuplicateLines = 5, TotalLines = 40, Score = 12.5, IsTestFile = false }
+        };
+
+        var output = _reporter.Render(report, "html");
+
+        // The "test" badge CSS class must be present in the HTML
+        Assert.Contains("tag tf", output, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void JsonOutput_FileScores_HaveIsTestFileField()
+    {
+        var report = MakeSampleReport();
+        report.FileScores = new List<FileScore>
+        {
+            new FileScore { File = "tests/FooTests.cs", DuplicateLines = 10, TotalLines = 40, Score = 25.0, IsTestFile = true }
+        };
+        var output = _reporter.Render(report, "json");
+
+        var doc = System.Text.Json.JsonDocument.Parse(output);
+        var fileScore = doc.RootElement.GetProperty("fileScores")[0];
+        Assert.True(fileScore.TryGetProperty("isTestFile", out var itf));
+        Assert.True(itf.GetBoolean());
     }
 }
 
@@ -384,8 +444,8 @@ public class ScoringTests
         var clusters = _detector.Detect(new List<CodeBlock> { b1, b2 }, 0.85);
         Assert.Single(clusters);
 
-        var ds = clusters[0].Metrics.DuplicationScore;
-        Assert.True(ds >= 0 && ds <= 100, $"DuplicationScore {ds} is out of range 0-100");
+        var ds = clusters[0].Metrics.Score;
+        Assert.True(ds >= 0 && ds <= 100, $"Score {ds} is out of range 0-100");
     }
 
     [Fact]
@@ -411,8 +471,30 @@ public class ScoringTests
         Assert.Single(clusters2);
         Assert.Single(clusters4);
 
-        var score2 = clusters2[0].Metrics.DuplicationScore;
-        var score4 = clusters4[0].Metrics.DuplicationScore;
+        var score2 = clusters2[0].Metrics.Score;
+        var score4 = clusters4[0].Metrics.Score;
         Assert.True(score4 >= score2, $"Score with 4 occurrences ({score4}) should be >= score with 2 ({score2})");
     }
+
+    [Fact]
+    public void SolutionScore_WithOverlappingClusters_DoesNotExceed100()
+    {
+        // Simulate a file where two clusters cover overlapping line ranges.
+        // Even if the additive count would exceed totalLines, the unique-line
+        // count must stay within bounds (score ≤ 100%).
+        var fileIntervals = new List<(int, int)>
+        {
+            (1, 50),  // cluster A covers half the file
+            (25, 80), // cluster B overlaps with A and extends further
+        };
+        var unique = LineCountHelper.CountUniqueLines(fileIntervals);
+        var totalLines = 100;
+        var score = Math.Min(100.0, unique * 100.0 / totalLines);
+
+        // Merged [1,80] = 80 unique lines
+        Assert.Equal(80, unique);
+        Assert.Equal(80.0, score, precision: 1);
+        Assert.True(score <= 100.0);
+    }
 }
+

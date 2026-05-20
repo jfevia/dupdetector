@@ -43,7 +43,7 @@ dotnet build
 
 ### Test
 
-Run the full test suite (5000+ tests):
+Run the full test suite (5100+ tests):
 
 ```bash
 dotnet test
@@ -72,12 +72,17 @@ dupdetector <path> [<path>...] [options]
 Options:
   --solution <path>        Additional solution/project/directory path (repeatable)
   --min-lines <int>        Minimum lines to consider a block (default: 5)
-  --similarity <0-1>       Jaccard similarity threshold (default: 0.85)
-  --format yaml|json|html  Output format (default: yaml)
-  --output <path>          Write output to a file instead of stdout
-  --exclude <glob>         Glob pattern to exclude (repeatable)
-  --include-generated      Include auto-generated files (default: false)
-  --detect <kinds>         Comma-separated kinds to detect: methods,constructors,local-functions (default: all)
+  --similarity <0-1>           Jaccard similarity threshold (default: 0.90)
+  --format yaml|json|html      Output format (default: yaml)
+  --output <path>              Write output to a file instead of stdout
+  --exclude <glob>             Glob pattern to exclude (repeatable)
+  --include-generated          Include auto-generated files (default: false)
+  --detect <kinds>             Comma-separated kinds to detect: methods,constructors,local-functions,windows (default: all)
+  --max-cluster-spread <int>   Discard near-dup clusters spanning more than N distinct files (default: 20, 0 = unlimited)
+  --min-cluster-spread <int>   Discard clusters spanning fewer than N distinct files (default: 2). Set to 1 to include same-file clusters
+  --min-project-spread <int>   Discard clusters spanning fewer than N distinct projects (default: 2). Set to 1 to include intra-project clusters
+  --max-cluster-occurrences <int>  Discard near-dup clusters with more than N total instances (default: 50, 0 = unlimited)
+  --exclude-test-files         Omit test files from scoring and output (default: false)
 ```
 
 #### Examples
@@ -99,7 +104,39 @@ dupdetector ./src --format html --output report.html
 
 Scan a directory and exclude tests, output JSON:
 ```bash
-dupdetector ./src --exclude "**/*.Tests.cs" --similarity 0.90 --format json
+dupdetector ./src --exclude-test-files --similarity 0.90 --format json
+```
+
+Detect sliding window duplicates (disabled by default):
+```bash
+dupdetector ./src --detect methods,windows
+```
+
+Cap mega-clusters to reduce noise from generic patterns:
+```bash
+dupdetector ./src --max-cluster-spread 10 --max-cluster-occurrences 30
+```
+
+Suppress same-file duplicate clusters (only report cross-file duplication):
+```bash
+dupdetector ./src --min-cluster-spread 1  # override the default-2 to include same-file clusters
+```
+
+Suppress intra-project duplicate clusters (only report cross-project duplication — this is the default):
+```bash
+dupdetector ./src --min-project-spread 2
+```
+
+Include intra-project clusters too (override the default-2):
+```bash
+dupdetector ./src --min-project-spread 1
+```
+
+Suppress framework boilerplate from architecture test projects (ArchUnitNET, etc.):
+```bash
+dupdetector MyApp.sln --exclude "*.Architecture.Tests*"
+# or raise --min-lines to filter the short 7-8 line test methods:
+dupdetector MyApp.sln --min-lines 10
 ```
 
 Scan multiple paths together (results are merged and deduplicated):
@@ -113,12 +150,35 @@ Use `--solution` flag to add paths (repeatable):
 dupdetector --solution MyApp.sln --solution ./extra --format yaml --output dup-report.yaml
 ```
 
-Detect only method duplicates (exclude constructors and local functions):
+Detect only method duplicates (exclude constructors, local functions, and sliding windows):
 ```bash
 dupdetector ./src --detect methods
 ```
 
-## Duplication Scoring
+Detect all block types including sliding windows:
+```bash
+dupdetector ./src --detect methods,constructors,local-functions,windows
+```
+
+## Data Quality
+
+The following design decisions prevent misleading output on real-world solutions:
+
+| Issue | Fix |
+|-------|-----|
+| `duplicateLines > totalLines` (overcounting) | Overlapping intervals are merged per file before counting unique duplicate lines |
+| `duplicationScore = 100` from sliding windows | Sliding window blocks (`<window@N>`) are **off by default**; enable with `--detect windows` |
+| Mega near-dup clusters from generic patterns | Near-dup clusters exceeding `--max-cluster-spread` or `--max-cluster-occurrences` are discarded |
+| Same-file clusters included by default | Default `--min-cluster-spread` is **2** — same-file clusters require `--min-cluster-spread 1` to include |
+| Intra-project test boilerplate dominates scores | Default `--min-project-spread` is **2** — intra-project clusters require `--min-project-spread 1` to include |
+| `obj/` and `bin/` build artifacts in file scores | Both directories are excluded by default; files inside `obj/` or `bin/` are never analyzed |
+| Score formula saturates too early at 100 | Divisor raised to 125 so only the absolute max cluster (50 lines, 25+ occ, 10+ files) scores 100 |
+| Test files masking production hotspots | Test files are annotated with a `[test]` badge in HTML; use `--exclude-test-files` to remove them |
+| Per-subdirectory "projects" instead of real ones | Files are grouped by their nearest `.csproj` ancestor, falling back to parent directory |
+| Default similarity too loose (0.85) | Raised to **0.90** — reduces false positives from structurally generic short methods |
+| Noisy "already part of workspace" warnings | Transitive-reference duplicate warnings are suppressed automatically |
+
+
 
 ### How the Score is Calculated
 
@@ -126,15 +186,15 @@ Scores are computed at four levels:
 
 | Level    | Formula                                                                 | Range  |
 |----------|-------------------------------------------------------------------------|--------|
-| Cluster  | `min(100, (min(lines,50) × min(occ,10) × min(spread,5)) / 25)` | 0–100 |
+| Cluster  | `min(100, (min(lines,50) × min(occ,25) × min(spread,10)) / 125)` | 0–100 |
 | File     | `(duplicate lines in file) / (total lines in file) × 100`          | 0–100 |
 | Project  | `(duplicate lines in project) / (total lines in project) × 100`    | 0–100 |
 | Solution | `(total duplicate lines) / (total lines) × 100`                    | 0–100 |
 
 **Cluster score** factors:
 - **Lines** – size of the duplicated block (capped at 50 for normalization)
-- **Occurrences** – how many times the block appears (capped at 10)
-- **Spread** – number of distinct files affected (capped at 5)
+- **Occurrences** – how many times the block appears (capped at 25)
+- **Spread** – number of distinct files affected (capped at 10)
 
 ### Score Interpretation
 
@@ -147,11 +207,13 @@ Scores are computed at four levels:
 
 ### Prioritizing Refactoring with the Results
 
-1. **Sort clusters by `duplicationScore` descending** – the top entries are the highest-value refactoring targets.
-2. **Look at `spread`** – blocks spread across many files are strong candidates for shared utility extraction.
-3. **Check `fileScores`** – files with a high score are duplication hotspots and may benefit from a full review.
-4. **Use `projectScores`** – identify which projects contribute most to solution-level duplication.
-5. **Read `normalizedSnippet`** – the normalized form highlights the structural pattern being duplicated.
+1. **Sort clusters by `score` descending** – the top entries are the highest-value refactoring targets.
+2. **Look at `isHighImpact: true`** – flags exact-copy clusters where `lines × fileSpread ≥ 100`. These are long verbatim copies that the occurrence multiplier would otherwise bury (e.g., a 71-line method copied once to another project scores only 1.6, but is still high-impact).
+3. **Look at `isExact: true`** – identifies verbatim hash-match copies (vs near-duplicates detected by Jaccard similarity). Exact copies are always higher-priority refactoring targets.
+4. **Look at `spread`** – blocks spread across many files are strong candidates for shared utility extraction.
+5. **Check `fileScores`** – files with a high score are duplication hotspots and may benefit from a full review.
+6. **Use `projectScores`** – identify which projects contribute most to solution-level duplication.
+7. **Read `normalizedSnippet`** – the normalized form highlights the structural pattern being duplicated.
 
 ## Sample Outputs
 
@@ -181,8 +243,11 @@ clusters:
       lines: 14
       occurrences: 2
       spread: 2
-      score: 0.56
-      duplicationScore: 2.24
+      projectSpread: 2
+      rawScore: 0.56
+      score: 2.24
+    isExact: true
+    isHighImpact: false
     normalizedSnippet: "var0 var1 = VAR_TYPE ..."
 fileScores:
   - file: src/Services/OrderService.cs
@@ -209,6 +274,17 @@ dupdetector ./src --format json | jq '.summary'
   "totalDuplicateLines": 180,
   "duplicationScore": 15.2,
   "scoreLabel": "medium"
+}
+```
+
+Cluster metrics in JSON use `score` (0–100 normalized) and `rawScore` (uncapped product):
+
+```json
+{
+  "id": "dup-44a17686",
+  "metrics": { "lines": 14, "occurrences": 2, "spread": 2, "rawScore": 0.56, "score": 2.24 },
+  "isExact": true,
+  "isHighImpact": false
 }
 ```
 

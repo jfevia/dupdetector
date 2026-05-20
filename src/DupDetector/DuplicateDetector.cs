@@ -7,11 +7,38 @@ namespace DupDetector;
 /// </summary>
 public class DuplicateDetector
 {
-    public List<DuplicateCluster> Detect(List<CodeBlock> blocks, double similarityThreshold)
+    /// <summary>
+    /// Detects duplicate clusters from the given code blocks.
+    /// </summary>
+    /// <param name="blocks">All extracted code blocks to analyse.</param>
+    /// <param name="similarityThreshold">Jaccard threshold for near-duplicate grouping.</param>
+    /// <param name="maxClusterSpread">
+    /// Discard near-duplicate clusters whose file spread exceeds this value.
+    /// 0 means no limit. Applies only to near-duplicate clusters, not exact-match clusters.
+    /// </param>
+    /// <param name="maxClusterOccurrences">
+    /// Discard near-duplicate clusters whose occurrence count exceeds this value.
+    /// 0 means no limit. Applies only to near-duplicate clusters, not exact-match clusters.
+    /// </param>
+    /// <param name="minClusterSpread">
+    /// Discard clusters whose file spread is below this value.
+    /// Default: 1 (keep all clusters). Applies to both exact-match and near-duplicate clusters.
+    /// </param>
+    /// <param name="minProjectSpread">
+    /// Discard clusters whose project spread is below this value.
+    /// Default: 1 (keep all clusters). Set to 2 to suppress intra-project clusters.
+    /// </param>
+    public List<DuplicateCluster> Detect(
+        List<CodeBlock> blocks,
+        double similarityThreshold,
+        int maxClusterSpread = 0,
+        int maxClusterOccurrences = 0,
+        int minClusterSpread = 1,
+        int minProjectSpread = 1)
     {
         var clusters = new List<DuplicateCluster>();
 
-        // Step 1: Exact match detection - group by normalized hash
+        // Step 1: Exact match detection — group by normalized hash
         var exactGroups = blocks
             .GroupBy(b => b.NormalizedHash)
             .Where(g => g.Count() >= 2)
@@ -22,7 +49,12 @@ public class DuplicateDetector
         foreach (var group in exactGroups)
         {
             var instances = group.OrderBy(b => b.FilePath).ThenBy(b => b.StartLine).ToList();
-            var cluster = BuildCluster(instances, group.Key);
+            var cluster = BuildCluster(instances, group.Key, isExact: true);
+            // Exact-match clusters below minClusterSpread are skipped but NOT added to assignedBlocks.
+            // This keeps their blocks eligible for the near-dup phase, where they may form a larger
+            // cross-file cluster that does meet the spread requirement.
+            if (cluster.Metrics.Spread < minClusterSpread) continue;
+            if (cluster.Metrics.ProjectSpread < minProjectSpread) continue;
             clusters.Add(cluster);
             foreach (var b in instances) assignedBlocks.Add(b);
         }
@@ -32,7 +64,18 @@ public class DuplicateDetector
         {
             var remaining = blocks.Where(b => !assignedBlocks.Contains(b)).ToList();
             var nearDupClusters = DetectNearDuplicates(remaining, similarityThreshold);
-            clusters.AddRange(nearDupClusters);
+
+            // Filter out oversized clusters that are likely generic-pattern false positives
+            foreach (var cluster in nearDupClusters)
+            {
+                bool tooLarge =
+                    (maxClusterSpread > 0 && cluster.Metrics.Spread > maxClusterSpread) ||
+                    (maxClusterOccurrences > 0 && cluster.Metrics.Occurrences > maxClusterOccurrences);
+                bool tooSmall = cluster.Metrics.Spread < minClusterSpread || cluster.Metrics.ProjectSpread < minProjectSpread;
+
+                if (!tooLarge && !tooSmall)
+                    clusters.Add(cluster);
+            }
         }
 
         // Step 3: Rank clusters by score descending
@@ -43,7 +86,6 @@ public class DuplicateDetector
     {
         if (blocks.Count < 2) return new List<DuplicateCluster>();
 
-        // Precompute token sets for Jaccard similarity
         var tokenSets = blocks.Select(b => TokenSet(b.NormalizedText)).ToList();
 
         // Union-Find for clustering
@@ -61,7 +103,6 @@ public class DuplicateDetector
             }
         }
 
-        // Group by root component
         var groups = new Dictionary<int, List<int>>();
         for (int i = 0; i < blocks.Count; i++)
         {
@@ -82,7 +123,6 @@ public class DuplicateDetector
                                    .OrderBy(b => b.FilePath)
                                    .ThenBy(b => b.StartLine)
                                    .ToList();
-            // Use hash of the first (canonical) block
             var cluster = BuildCluster(groupBlocks, groupBlocks[0].NormalizedHash);
             clusters.Add(cluster);
         }
@@ -90,7 +130,7 @@ public class DuplicateDetector
         return clusters;
     }
 
-    private static DuplicateCluster BuildCluster(List<CodeBlock> instances, string hashKey)
+    private static DuplicateCluster BuildCluster(List<CodeBlock> instances, string hashKey, bool isExact = false)
     {
         var id = $"dup-{hashKey[..Math.Min(8, hashKey.Length)]}";
 
@@ -106,12 +146,16 @@ public class DuplicateDetector
         var avgLines = (int)Math.Round(instances.Average(b => b.LineCount));
         var occurrences = instances.Count;
         var spread = instances.Select(b => b.FilePath).Distinct().Count();
-        var score = (avgLines * occurrences * spread) / 100.0;
+        var projectSpread = instances.Select(b => b.ProjectName).Where(p => !string.IsNullOrEmpty(p)).Distinct(StringComparer.OrdinalIgnoreCase).Count();
+        if (projectSpread == 0) projectSpread = spread; // fall back to file spread when project info unavailable
+        var rawScore = (avgLines * occurrences * spread) / 100.0;
 
-        // Normalized 0–100 score: capped product of block size, spread, and occurrences.
-        // Max bucket: 50 lines × 10 occurrences × 5 files = 2500 → maps to 100.
+        // Normalized 0-100 score: product of block size, occurrence count, and spread.
+        // Divisor is 125 = 50×25×10/100, so the absolute maximum cluster (50 lines, 25+
+        // occurrences, 10+ files) scores exactly 100.  All other clusters score strictly
+        // below 100, giving meaningful differentiation across the full severity range.
         var duplicationScore = Math.Round(
-            Math.Min(100.0, (Math.Min(avgLines, 50) * Math.Min(occurrences, 10) * Math.Min(spread, 5)) / 25.0),
+            Math.Min(100.0, (Math.Min(avgLines, 50) * Math.Min(occurrences, 25) * Math.Min(spread, 10)) / 125.0),
             2);
 
         var metrics = new ClusterMetrics
@@ -119,8 +163,9 @@ public class DuplicateDetector
             Lines = avgLines,
             Occurrences = occurrences,
             Spread = spread,
-            Score = score,
-            DuplicationScore = duplicationScore
+            ProjectSpread = projectSpread,
+            RawScore = rawScore,
+            Score = duplicationScore
         };
 
         return new DuplicateCluster
@@ -129,13 +174,14 @@ public class DuplicateDetector
             Instances = codeInstances,
             Metrics = metrics,
             NormalizedSnippet = instances[0].NormalizedText,
-            RawSnippets = instances.Select(b => b.RawText).ToList()
+            RawSnippets = instances.Select(b => b.RawText).ToList(),
+            IsExact = isExact,
+            IsHighImpact = isExact && (avgLines * spread >= 100)
         };
     }
 
     private static HashSet<string> TokenSet(string normalizedText)
     {
-        // Tokenize by splitting on whitespace and punctuation
         return normalizedText
             .Split(new[] { ' ', '\t', '\n', '\r', '{', '}', '(', ')', ';', ',', '.', '[', ']' },
                    StringSplitOptions.RemoveEmptyEntries)

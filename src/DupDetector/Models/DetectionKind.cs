@@ -18,6 +18,13 @@ public enum DetectionKind
     /// <summary>Local function declarations inside method bodies.</summary>
     LocalFunctions = 4,
 
-    /// <summary>All supported declaration kinds (default).</summary>
+    /// <summary>
+    /// Sliding-window sub-method fragments. Produces overlapping <c>&lt;window@N&gt;</c> blocks
+    /// inside method bodies. Disabled by default because it generates a very high rate of
+    /// false-positive near-duplicate clusters. Enable explicitly with <c>--detect windows</c>.
+    /// </summary>
+    Windows = 8,
+
+    /// <summary>All supported declaration kinds (default). Does NOT include Windows.</summary>
     All = Methods | Constructors | LocalFunctions,
 }
