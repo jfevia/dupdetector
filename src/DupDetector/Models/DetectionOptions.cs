@@ -15,6 +15,12 @@ public class DetectionOptions
     public List<string> InputPaths { get; set; } = new();
     public string OutputPath { get; set; } = "";
     /// <summary>
+    /// Discard clusters whose file spread is below this value.
+    /// Default: 1 (keep all clusters). Set to 2 to suppress same-file clusters,
+    /// which are often intentional patterns in test or architecture projects.
+    /// </summary>
+    public int MinClusterSpread { get; set; } = 1;
+    /// <summary>
     /// Discard near-duplicate clusters whose file spread exceeds this value.
     /// Prevents generic structural patterns from forming mega-clusters.
     /// Default: 20. Set to 0 to disable filtering.

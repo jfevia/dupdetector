@@ -79,6 +79,7 @@ Options:
   --include-generated          Include auto-generated files (default: false)
   --detect <kinds>             Comma-separated kinds to detect: methods,constructors,local-functions,windows (default: all)
   --max-cluster-spread <int>   Discard near-dup clusters spanning more than N distinct files (default: 20, 0 = unlimited)
+  --min-cluster-spread <int>   Discard clusters spanning fewer than N distinct files (default: 1). Set to 2 to suppress same-file clusters
   --max-cluster-occurrences <int>  Discard near-dup clusters with more than N total instances (default: 50, 0 = unlimited)
   --exclude-test-files         Omit test files from scoring and output (default: false)
 ```
@@ -115,6 +116,11 @@ Cap mega-clusters to reduce noise from generic patterns:
 dupdetector ./src --max-cluster-spread 10 --max-cluster-occurrences 30
 ```
 
+Suppress same-file duplicate clusters (only report cross-file duplication):
+```bash
+dupdetector ./src --min-cluster-spread 2
+```
+
 Scan multiple paths together (results are merged and deduplicated):
 ```bash
 dupdetector ./src ./lib --format yaml
@@ -145,9 +151,13 @@ The following design decisions prevent misleading output on real-world solutions
 | `duplicateLines > totalLines` (overcounting) | Overlapping intervals are merged per file before counting unique duplicate lines |
 | `duplicationScore = 100` from sliding windows | Sliding window blocks (`<window@N>`) are **off by default**; enable with `--detect windows` |
 | Mega near-dup clusters from generic patterns | Near-dup clusters exceeding `--max-cluster-spread` or `--max-cluster-occurrences` are discarded |
+| Same-file / same-project false positives | Use `--min-cluster-spread 2` to suppress clusters that are entirely within a single file |
+| `obj/` and `bin/` build artifacts in file scores | Both directories are excluded by default; files inside `obj/` or `bin/` are never analyzed |
+| Score formula saturates too early at 100 | Formula caps raised (occ: 10→25, spread: 5→10) so severity above the old threshold is differentiated |
 | Test files masking production hotspots | Test files are annotated with a `[test]` badge in HTML; use `--exclude-test-files` to remove them |
 | Per-subdirectory "projects" instead of real ones | Files are grouped by their nearest `.csproj` ancestor, falling back to parent directory |
 | Default similarity too loose (0.85) | Raised to **0.90** — reduces false positives from structurally generic short methods |
+| Noisy "already part of workspace" warnings | Transitive-reference duplicate warnings are suppressed automatically |
 
 
 
@@ -157,15 +167,15 @@ Scores are computed at four levels:
 
 | Level    | Formula                                                                 | Range  |
 |----------|-------------------------------------------------------------------------|--------|
-| Cluster  | `min(100, (min(lines,50) × min(occ,10) × min(spread,5)) / 25)` | 0–100 |
+| Cluster  | `min(100, (min(lines,50) × min(occ,25) × min(spread,10)) / 50)` | 0–100 |
 | File     | `(duplicate lines in file) / (total lines in file) × 100`          | 0–100 |
 | Project  | `(duplicate lines in project) / (total lines in project) × 100`    | 0–100 |
 | Solution | `(total duplicate lines) / (total lines) × 100`                    | 0–100 |
 
 **Cluster score** factors:
 - **Lines** – size of the duplicated block (capped at 50 for normalization)
-- **Occurrences** – how many times the block appears (capped at 10)
-- **Spread** – number of distinct files affected (capped at 5)
+- **Occurrences** – how many times the block appears (capped at 25)
+- **Spread** – number of distinct files affected (capped at 10)
 
 ### Score Interpretation
 

@@ -46,6 +46,9 @@ public static class CliArgParser
                 case "--include-generated":
                     opts.IncludeGenerated = true;
                     break;
+                case "--min-cluster-spread" when i + 1 < args.Length:
+                    if (int.TryParse(args[++i], out var mincs)) opts.MinClusterSpread = Math.Max(1, mincs);
+                    break;
                 case "--max-cluster-spread" when i + 1 < args.Length:
                     if (int.TryParse(args[++i], out var mcs)) opts.MaxClusterSpread = mcs;
                     break;

@@ -20,6 +20,7 @@ public class CliArgParserTests
         Assert.Equal(0.90, opts.Similarity, precision: 2);
         Assert.Equal("yaml", opts.Format);
         Assert.Equal(DetectionKind.All, opts.DetectionKinds);
+        Assert.Equal(1, opts.MinClusterSpread);
         Assert.Equal(20, opts.MaxClusterSpread);
         Assert.Equal(50, opts.MaxClusterOccurrences);
         Assert.False(opts.IncludeGenerated);
@@ -180,6 +181,49 @@ public class CliArgParserTests
         Assert.True(opts.ExcludeTestFiles);
     }
 
+    // ──── --min-cluster-spread flag (GAP-2/3) ─────────────────────────────────
+
+    [Fact]
+    public void MinClusterSpreadDefault_IsOne()
+    {
+        var opts = CliArgParser.Parse(["path.sln"]);
+        Assert.Equal(1, opts.MinClusterSpread);
+    }
+
+    [Fact]
+    public void MinClusterSpreadFlag_IsParsed()
+    {
+        var opts = CliArgParser.Parse(["path.sln", "--min-cluster-spread", "2"]);
+        Assert.Equal(2, opts.MinClusterSpread);
+    }
+
+    [Fact]
+    public void MinClusterSpreadFlag_HighValue_IsParsed()
+    {
+        var opts = CliArgParser.Parse(["path.sln", "--min-cluster-spread", "10"]);
+        Assert.Equal(10, opts.MinClusterSpread);
+    }
+
+    [Fact]
+    public void MinClusterSpreadFlag_Zero_ClampedToOne()
+    {
+        // 0 would mean "no clusters" which is never useful; clamp to 1
+        var opts = CliArgParser.Parse(["path.sln", "--min-cluster-spread", "0"]);
+        Assert.Equal(1, opts.MinClusterSpread);
+    }
+
+    [Fact]
+    public void MinClusterSpread_CombinedWithMaxClusterSpread_BothParsed()
+    {
+        var opts = CliArgParser.Parse([
+            "path.sln",
+            "--min-cluster-spread", "2",
+            "--max-cluster-spread", "15"
+        ]);
+        Assert.Equal(2, opts.MinClusterSpread);
+        Assert.Equal(15, opts.MaxClusterSpread);
+    }
+
     // ──── No input paths ─────────────────────────────────────────────────────
 
     [Fact]
@@ -215,5 +259,24 @@ public class CliArgParserTests
         Assert.Equal(50, opts.MaxClusterOccurrences);
         Assert.True(opts.ExcludeTestFiles);
         Assert.Contains("**/*.g.cs", opts.Exclude);
+    }
+
+    [Fact]
+    public void RealWorldInvocation_WithMinClusterSpread_ParsesCorrectly()
+    {
+        var opts = CliArgParser.Parse([
+            "solution.slnx",
+            "--format", "yaml",
+            "--min-lines", "5",
+            "--similarity", "0.90",
+            "--min-cluster-spread", "2",
+            "--max-cluster-spread", "20",
+            "--max-cluster-occurrences", "50"
+        ]);
+
+        Assert.Contains("solution.slnx", opts.InputPaths);
+        Assert.Equal(2, opts.MinClusterSpread);
+        Assert.Equal(20, opts.MaxClusterSpread);
+        Assert.Equal(50, opts.MaxClusterOccurrences);
     }
 }

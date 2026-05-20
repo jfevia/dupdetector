@@ -20,11 +20,16 @@ public class DuplicateDetector
     /// Discard near-duplicate clusters whose occurrence count exceeds this value.
     /// 0 means no limit. Applies only to near-duplicate clusters, not exact-match clusters.
     /// </param>
+    /// <param name="minClusterSpread">
+    /// Discard clusters whose file spread is below this value.
+    /// Default: 1 (keep all clusters). Applies to both exact-match and near-duplicate clusters.
+    /// </param>
     public List<DuplicateCluster> Detect(
         List<CodeBlock> blocks,
         double similarityThreshold,
         int maxClusterSpread = 0,
-        int maxClusterOccurrences = 0)
+        int maxClusterOccurrences = 0,
+        int minClusterSpread = 1)
     {
         var clusters = new List<DuplicateCluster>();
 
@@ -40,6 +45,10 @@ public class DuplicateDetector
         {
             var instances = group.OrderBy(b => b.FilePath).ThenBy(b => b.StartLine).ToList();
             var cluster = BuildCluster(instances, group.Key);
+            // Exact-match clusters below minClusterSpread are skipped but NOT added to assignedBlocks.
+            // This keeps their blocks eligible for the near-dup phase, where they may form a larger
+            // cross-file cluster that does meet the spread requirement.
+            if (cluster.Metrics.Spread < minClusterSpread) continue;
             clusters.Add(cluster);
             foreach (var b in instances) assignedBlocks.Add(b);
         }
@@ -56,8 +65,9 @@ public class DuplicateDetector
                 bool tooLarge =
                     (maxClusterSpread > 0 && cluster.Metrics.Spread > maxClusterSpread) ||
                     (maxClusterOccurrences > 0 && cluster.Metrics.Occurrences > maxClusterOccurrences);
+                bool tooSmall = cluster.Metrics.Spread < minClusterSpread;
 
-                if (!tooLarge)
+                if (!tooLarge && !tooSmall)
                     clusters.Add(cluster);
             }
         }
@@ -132,9 +142,13 @@ public class DuplicateDetector
         var spread = instances.Select(b => b.FilePath).Distinct().Count();
         var score = (avgLines * occurrences * spread) / 100.0;
 
-        // Normalized 0-100 score: capped product of block size, spread, and occurrences.
+        // Normalized 0-100 score: product of block size, occurrence count, and spread.
+        // Inner caps are set higher (occ=25, spread=10) than the old formula (occ=10, spread=5)
+        // so that clusters exceeding the old thresholds are differentiated rather than all
+        // saturating at 100.  The divisor (50) is adjusted proportionally to keep "normal"
+        // clusters in a sensible range.
         var duplicationScore = Math.Round(
-            Math.Min(100.0, (Math.Min(avgLines, 50) * Math.Min(occurrences, 10) * Math.Min(spread, 5)) / 25.0),
+            Math.Min(100.0, (Math.Min(avgLines, 50) * Math.Min(occurrences, 25) * Math.Min(spread, 10)) / 50.0),
             2);
 
         var metrics = new ClusterMetrics

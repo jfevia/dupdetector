@@ -17,6 +17,7 @@ if (options.InputPaths.Count == 0)
     Console.Error.WriteLine("  --include-generated                 Include auto-generated files");
     Console.Error.WriteLine("  --detect <kinds>                    Comma-separated kinds: methods,constructors,local-functions,windows (default: all without windows)");
     Console.Error.WriteLine("  --max-cluster-spread <int>          Discard near-dup clusters with spread above this (default: 20, 0=unlimited)");
+    Console.Error.WriteLine("  --min-cluster-spread <int>          Discard clusters with spread below this (default: 1). Set to 2 to suppress same-file clusters");
     Console.Error.WriteLine("  --max-cluster-occurrences <int>     Discard near-dup clusters with occurrences above this (default: 50, 0=unlimited)");
     Console.Error.WriteLine("  --exclude-test-files                Omit test files from file/project score output");
     return 1;
@@ -49,7 +50,7 @@ try
 
     // 3. Detect duplicates
     var detector = new DuplicateDetector();
-    var clusters = detector.Detect(allBlocks, options.Similarity, options.MaxClusterSpread, options.MaxClusterOccurrences);
+    var clusters = detector.Detect(allBlocks, options.Similarity, options.MaxClusterSpread, options.MaxClusterOccurrences, options.MinClusterSpread);
 
     // 4. Build file-level line counts
     var fileLineCounts = documents

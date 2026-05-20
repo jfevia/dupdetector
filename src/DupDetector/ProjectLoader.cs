@@ -63,7 +63,13 @@ public class ProjectLoader
 
         using var workspace = MSBuildWorkspace.Create();
         workspace.WorkspaceFailed += (_, e) =>
+        {
+            // Suppress transitive-reference duplicate warnings — they are cosmetic and
+            // do not affect analysis results (files are already deduplicated by path).
+            if (e.Diagnostic.Message.Contains("already part of the workspace", StringComparison.OrdinalIgnoreCase))
+                return;
             Console.Error.WriteLine($"[workspace] {e.Diagnostic.Kind}: {e.Diagnostic.Message}");
+        };
 
         IEnumerable<Document> documents;
         string? singleProjectName = null;
@@ -124,7 +130,11 @@ public class ProjectLoader
 
         using var workspace = MSBuildWorkspace.Create();
         workspace.WorkspaceFailed += (_, e) =>
+        {
+            if (e.Diagnostic.Message.Contains("already part of the workspace", StringComparison.OrdinalIgnoreCase))
+                return;
             Console.Error.WriteLine($"[workspace] {e.Diagnostic.Kind}: {e.Diagnostic.Message}");
+        };
 
         var results = new List<SourceDocument>();
         foreach (var projectPath in projectPaths)
@@ -207,9 +217,33 @@ public class ProjectLoader
 
     private bool ShouldExclude(string filePath)
     {
+        if (IsArtifactPath(filePath)) return true;
         foreach (var pattern in _options.Exclude)
         {
             if (GlobMatch(pattern, filePath)) return true;
+        }
+        return false;
+    }
+
+    /// <summary>Internal helper exposed for unit testing.</summary>
+    internal bool IsExcluded(string filePath) => ShouldExclude(filePath);
+
+    /// <summary>Internal helper exposed for unit testing.</summary>
+    internal List<SourceDocument> LoadFromDirectoryInternal(string dir) => LoadFromDirectory(dir);
+
+    /// <summary>
+    /// Returns <c>true</c> when the file resides inside a build-artifact directory
+    /// (<c>obj</c> or <c>bin</c>). These directories contain auto-generated files
+    /// that should never appear in duplication analysis output.
+    /// </summary>
+    private static bool IsArtifactPath(string filePath)
+    {
+        var normalized = filePath.Replace('\\', '/');
+        foreach (var segment in normalized.Split('/'))
+        {
+            if (segment.Equals("obj", StringComparison.OrdinalIgnoreCase) ||
+                segment.Equals("bin", StringComparison.OrdinalIgnoreCase))
+                return true;
         }
         return false;
     }

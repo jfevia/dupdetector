@@ -190,4 +190,161 @@ public class ClusterFilteringTests
         Assert.NotEmpty(clusters);
         Assert.Contains(clusters, c => c.Metrics.Occurrences == 30);
     }
+
+    // ──── Min cluster spread filtering (GAP-2/3) ─────────────────────────────
+
+    [Fact]
+    public void MinSpread_Default1_KeepsAllClusters()
+    {
+        // Exact match across 1 file (spread=1)
+        var code = """
+            void SingleFileWork(int x, int y, int z) {
+                var r = x * y + z;
+                Console.WriteLine(r);
+                return;
+            }
+            """;
+        var block1 = MakeBlock(code, "single.cs", 1, 5);
+        var block2 = MakeBlock(code, "single.cs", 10, 14);
+
+        var clusters = _detector.Detect(new List<CodeBlock> { block1, block2 }, 0.99,
+            maxClusterSpread: 0, maxClusterOccurrences: 0, minClusterSpread: 1);
+
+        Assert.NotEmpty(clusters);
+    }
+
+    [Fact]
+    public void MinSpread_2_RemovesSingleFileExactClusters()
+    {
+        // Exact match across 1 file (spread=1) should be filtered when minSpread=2
+        var code = """
+            void SingleFileWork(int x, int y, int z) {
+                var r = x * y + z;
+                Console.WriteLine(r);
+                return;
+            }
+            """;
+        var block1 = MakeBlock(code, "single.cs", 1, 5);
+        var block2 = MakeBlock(code, "single.cs", 10, 14);
+
+        var clusters = _detector.Detect(new List<CodeBlock> { block1, block2 }, 0.99,
+            maxClusterSpread: 0, maxClusterOccurrences: 0, minClusterSpread: 2);
+
+        // spread=1 cluster must be removed
+        Assert.DoesNotContain(clusters, c => c.Metrics.Spread < 2);
+    }
+
+    [Fact]
+    public void MinSpread_2_KeepsMultiFileClusters()
+    {
+        // Same code across 3 different files (spread=3) should survive minSpread=2
+        var code = """
+            void MultiFileWork(int x, int y, int z) {
+                var r = x * y + z;
+                Console.WriteLine(r);
+                return;
+            }
+            """;
+        var blocks = Enumerable.Range(0, 3)
+            .Select(i => MakeBlock(code, $"file{i}.cs", 1, 5))
+            .ToList();
+
+        var clusters = _detector.Detect(blocks, 0.99,
+            maxClusterSpread: 0, maxClusterOccurrences: 0, minClusterSpread: 2);
+
+        Assert.NotEmpty(clusters);
+        Assert.Contains(clusters, c => c.Metrics.Spread == 3);
+    }
+
+    [Fact]
+    public void MinSpread_AtExactlyRequired_IsKept()
+    {
+        // spread == minClusterSpread should be kept (boundary is inclusive)
+        var code = """
+            void BoundaryWork(int x, int y, int z) {
+                var r = x + y + z;
+                Console.WriteLine(r);
+                return;
+            }
+            """;
+        var blocks = Enumerable.Range(0, 3)
+            .Select(i => MakeBlock(code, $"bound{i}.cs", 1, 5))
+            .ToList();
+
+        var clusters = _detector.Detect(blocks, 0.99,
+            maxClusterSpread: 0, maxClusterOccurrences: 0, minClusterSpread: 3);
+
+        // spread=3 and minSpread=3 → cluster should survive
+        Assert.NotEmpty(clusters);
+    }
+
+    [Fact]
+    public void MinSpread_NearDupClusters_AlsoFiltered()
+    {
+        // Near-dup cluster with spread=1 should also be filtered
+        var code1 = """
+            void Work1(int x, int y, int z) {
+                var alpha = x + y;
+                var beta = alpha + z;
+                Console.WriteLine(beta);
+            }
+            """;
+        var code2 = """
+            void Work2(int a, int b, int c) {
+                var foo = a + b;
+                var bar = foo + c;
+                Console.WriteLine(bar);
+            }
+            """;
+        // Both in same file → spread=1 after normalization makes them near-dups
+        var block1 = MakeBlock(code1, "oneFile.cs", 1, 5);
+        var block2 = MakeBlock(code2, "oneFile.cs", 10, 14);
+
+        var clusters = _detector.Detect(new List<CodeBlock> { block1, block2 }, 0.70,
+            maxClusterSpread: 0, maxClusterOccurrences: 0, minClusterSpread: 2);
+
+        Assert.DoesNotContain(clusters, c => c.Metrics.Spread < 2);
+    }
+
+    [Fact]
+    public void MinSpread_CombinedWithMaxSpread_FiltersCorrectly()
+    {
+        // spread=1 filtered by minSpread, spread=10 filtered by maxSpread
+        // Only spread in range [2,8] should survive
+        var codeA = """
+            void WorkA(int x, int y, int z) {
+                var r1 = x * y;
+                var r2 = r1 + z;
+                Console.WriteLine(r2);
+            }
+            """;
+        var codeB = """
+            void WorkB(int a, int b, int c) {
+                var r1 = a + b;
+                var r2 = r1 * c;
+                Console.WriteLine(r2);
+            }
+            """;
+
+        // Cluster A: spread=1 (same file, exact dup)
+        var blocksA = new List<CodeBlock>
+        {
+            MakeBlock(codeA, "same.cs", 1, 5),
+            MakeBlock(codeA, "same.cs", 10, 14),
+        };
+        // Cluster B: spread=4
+        var blocksB = Enumerable.Range(0, 4)
+            .Select(i => MakeBlock(codeB, $"spreadB{i}.cs", 1, 5))
+            .ToList();
+
+        var allBlocks = blocksA.Concat(blocksB).ToList();
+        var clusters = _detector.Detect(allBlocks, 0.99,
+            maxClusterSpread: 8, maxClusterOccurrences: 0, minClusterSpread: 2);
+
+        // Cluster A (spread=1) should be removed by minSpread
+        Assert.DoesNotContain(clusters, c => c.Metrics.Spread < 2);
+        // Cluster B (spread=4) should survive
+        Assert.Contains(clusters, c => c.Metrics.Spread == 4);
+    }
 }
+
