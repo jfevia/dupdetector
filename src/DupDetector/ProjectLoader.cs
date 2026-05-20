@@ -139,6 +139,14 @@ public class ProjectLoader
         var results = new List<SourceDocument>();
         foreach (var projectPath in projectPaths)
         {
+            // Proactively skip projects already loaded as transitive dependencies.
+            // This avoids the "already part of the workspace" warnings that fire
+            // when MSBuildWorkspace encounters a project it previously loaded while
+            // opening another project's dependencies.
+            if (workspace.CurrentSolution.Projects.Any(p =>
+                string.Equals(p.FilePath, projectPath, StringComparison.OrdinalIgnoreCase)))
+                continue;
+
             try
             {
                 var project = await workspace.OpenProjectAsync(projectPath);

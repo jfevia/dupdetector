@@ -217,10 +217,10 @@ public class ProjectSpreadFilterTests
     }
 
     [Fact]
-    public void CliParser_MinProjectSpread_Default_IsOne()
+    public void CliParser_MinProjectSpread_Default_IsTwo()
     {
         var opts = CliArgParser.Parse(["my.sln"]);
-        Assert.Equal(1, opts.MinProjectSpread);
+        Assert.Equal(2, opts.MinProjectSpread);
     }
 
     [Fact]

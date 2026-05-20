@@ -49,7 +49,7 @@ public class DuplicateDetector
         foreach (var group in exactGroups)
         {
             var instances = group.OrderBy(b => b.FilePath).ThenBy(b => b.StartLine).ToList();
-            var cluster = BuildCluster(instances, group.Key);
+            var cluster = BuildCluster(instances, group.Key, isExact: true);
             // Exact-match clusters below minClusterSpread are skipped but NOT added to assignedBlocks.
             // This keeps their blocks eligible for the near-dup phase, where they may form a larger
             // cross-file cluster that does meet the spread requirement.
@@ -130,7 +130,7 @@ public class DuplicateDetector
         return clusters;
     }
 
-    private static DuplicateCluster BuildCluster(List<CodeBlock> instances, string hashKey)
+    private static DuplicateCluster BuildCluster(List<CodeBlock> instances, string hashKey, bool isExact = false)
     {
         var id = $"dup-{hashKey[..Math.Min(8, hashKey.Length)]}";
 
@@ -148,7 +148,7 @@ public class DuplicateDetector
         var spread = instances.Select(b => b.FilePath).Distinct().Count();
         var projectSpread = instances.Select(b => b.ProjectName).Where(p => !string.IsNullOrEmpty(p)).Distinct(StringComparer.OrdinalIgnoreCase).Count();
         if (projectSpread == 0) projectSpread = spread; // fall back to file spread when project info unavailable
-        var score = (avgLines * occurrences * spread) / 100.0;
+        var rawScore = (avgLines * occurrences * spread) / 100.0;
 
         // Normalized 0-100 score: product of block size, occurrence count, and spread.
         // Divisor is 125 = 50×25×10/100, so the absolute maximum cluster (50 lines, 25+
@@ -164,8 +164,8 @@ public class DuplicateDetector
             Occurrences = occurrences,
             Spread = spread,
             ProjectSpread = projectSpread,
-            Score = score,
-            DuplicationScore = duplicationScore
+            RawScore = rawScore,
+            Score = duplicationScore
         };
 
         return new DuplicateCluster
@@ -174,7 +174,9 @@ public class DuplicateDetector
             Instances = codeInstances,
             Metrics = metrics,
             NormalizedSnippet = instances[0].NormalizedText,
-            RawSnippets = instances.Select(b => b.RawText).ToList()
+            RawSnippets = instances.Select(b => b.RawText).ToList(),
+            IsExact = isExact,
+            IsHighImpact = isExact && (avgLines * spread >= 100)
         };
     }
 

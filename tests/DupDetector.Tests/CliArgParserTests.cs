@@ -21,7 +21,7 @@ public class CliArgParserTests
         Assert.Equal("yaml", opts.Format);
         Assert.Equal(DetectionKind.All, opts.DetectionKinds);
         Assert.Equal(2, opts.MinClusterSpread);
-        Assert.Equal(1, opts.MinProjectSpread);
+        Assert.Equal(2, opts.MinProjectSpread);
         Assert.Equal(20, opts.MaxClusterSpread);
         Assert.Equal(50, opts.MaxClusterOccurrences);
         Assert.False(opts.IncludeGenerated);

@@ -34,11 +34,12 @@ public class DetectionOptions
     public int MaxClusterOccurrences { get; set; } = 50;
     /// <summary>
     /// Discard clusters whose project spread is below this value.
-    /// Default: 1 (keep all clusters). Set to 2 to suppress clusters where all instances
-    /// are within the same project — useful for filtering intra-project test boilerplate
-    /// that dominates project scores but is not a cross-project refactoring target.
+    /// Default: 2 (suppress intra-project clusters). Set to 1 to include clusters where all
+    /// instances are within the same project. Intra-project clusters are rarely cross-project
+    /// refactoring targets — they typically represent intentional test boilerplate (e.g., stub
+    /// classes repeated per test class) or project-specific conventions.
     /// </summary>
-    public int MinProjectSpread { get; set; } = 1;
+    public int MinProjectSpread { get; set; } = 2;
     /// <summary>
     /// When true, test files are excluded from fileScores and projectScores output.
     /// Test files are identified by path heuristics (contains /Tests/, /Test/, /Specs/, etc.).

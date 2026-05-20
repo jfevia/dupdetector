@@ -67,9 +67,9 @@ public class ScoringFormulaTests
 
         foreach (var cluster in clusters)
         {
-            var ds = cluster.Metrics.DuplicationScore;
+            var ds = cluster.Metrics.Score;
             Assert.True(ds >= 0 && ds <= 100,
-                $"DuplicationScore {ds} is out of [0, 100] range");
+                $"Score {ds} is out of [0, 100] range");
         }
     }
 
@@ -90,8 +90,8 @@ public class ScoringFormulaTests
         var cluster2 = _detector.Detect(blocks2, 0.99)[0];
         var cluster5 = _detector.Detect(blocks5, 0.99)[0];
 
-        Assert.True(cluster5.Metrics.DuplicationScore >= cluster2.Metrics.DuplicationScore,
-            $"More spread ({cluster5.Metrics.DuplicationScore}) should score >= less spread ({cluster2.Metrics.DuplicationScore})");
+        Assert.True(cluster5.Metrics.Score >= cluster2.Metrics.Score,
+            $"More spread ({cluster5.Metrics.Score}) should score >= less spread ({cluster2.Metrics.Score})");
     }
 
     [Fact]
@@ -108,8 +108,8 @@ public class ScoringFormulaTests
         var cluster5 = _detector.Detect(blocks5, 0.99)[0];
         var cluster15 = _detector.Detect(blocks15, 0.99)[0];
 
-        Assert.True(cluster15.Metrics.DuplicationScore >= cluster5.Metrics.DuplicationScore,
-            $"More occurrences ({cluster15.Metrics.DuplicationScore}) should score >= fewer ({cluster5.Metrics.DuplicationScore})");
+        Assert.True(cluster15.Metrics.Score >= cluster5.Metrics.Score,
+            $"More occurrences ({cluster15.Metrics.Score}) should score >= fewer ({cluster5.Metrics.Score})");
     }
 
     // ──── Large cluster (report: dup-69393cb9 scenario) ─────────────────────
@@ -127,8 +127,8 @@ public class ScoringFormulaTests
         Assert.True(clusters.Count > 0);
 
         var top = clusters[0];
-        Assert.True(top.Metrics.DuplicationScore >= 25.0,
-            $"Large cluster should score >= 25, got {top.Metrics.DuplicationScore}");
+        Assert.True(top.Metrics.Score >= 25.0,
+            $"Large cluster should score >= 25, got {top.Metrics.Score}");
     }
 
     // ──── Small cluster should NOT score 100 ────────────────────────────────
@@ -146,8 +146,8 @@ public class ScoringFormulaTests
         Assert.True(clusters.Count > 0);
 
         var top = clusters[0];
-        Assert.True(top.Metrics.DuplicationScore < 100,
-            $"(50 lines, 10 occ, 5 spread) should score < 100 with new formula, got {top.Metrics.DuplicationScore}");
+        Assert.True(top.Metrics.Score < 100,
+            $"(50 lines, 10 occ, 5 spread) should score < 100 with new formula, got {top.Metrics.Score}");
     }
 
     // ──── Formula values match expected calculation ───────────────────────────
