@@ -43,7 +43,7 @@ dotnet build
 
 ### Test
 
-Run the full test suite (5000+ tests):
+Run the full test suite (5100+ tests):
 
 ```bash
 dotnet test
@@ -72,12 +72,15 @@ dupdetector <path> [<path>...] [options]
 Options:
   --solution <path>        Additional solution/project/directory path (repeatable)
   --min-lines <int>        Minimum lines to consider a block (default: 5)
-  --similarity <0-1>       Jaccard similarity threshold (default: 0.85)
-  --format yaml|json|html  Output format (default: yaml)
-  --output <path>          Write output to a file instead of stdout
-  --exclude <glob>         Glob pattern to exclude (repeatable)
-  --include-generated      Include auto-generated files (default: false)
-  --detect <kinds>         Comma-separated kinds to detect: methods,constructors,local-functions (default: all)
+  --similarity <0-1>           Jaccard similarity threshold (default: 0.90)
+  --format yaml|json|html      Output format (default: yaml)
+  --output <path>              Write output to a file instead of stdout
+  --exclude <glob>             Glob pattern to exclude (repeatable)
+  --include-generated          Include auto-generated files (default: false)
+  --detect <kinds>             Comma-separated kinds to detect: methods,constructors,local-functions,windows (default: all)
+  --max-cluster-spread <int>   Discard near-dup clusters spanning more than N distinct files (default: 20, 0 = unlimited)
+  --max-cluster-occurrences <int>  Discard near-dup clusters with more than N total instances (default: 50, 0 = unlimited)
+  --exclude-test-files         Omit test files from scoring and output (default: false)
 ```
 
 #### Examples
@@ -99,7 +102,17 @@ dupdetector ./src --format html --output report.html
 
 Scan a directory and exclude tests, output JSON:
 ```bash
-dupdetector ./src --exclude "**/*.Tests.cs" --similarity 0.90 --format json
+dupdetector ./src --exclude-test-files --similarity 0.90 --format json
+```
+
+Detect sliding window duplicates (disabled by default):
+```bash
+dupdetector ./src --detect methods,windows
+```
+
+Cap mega-clusters to reduce noise from generic patterns:
+```bash
+dupdetector ./src --max-cluster-spread 10 --max-cluster-occurrences 30
 ```
 
 Scan multiple paths together (results are merged and deduplicated):
@@ -113,12 +126,30 @@ Use `--solution` flag to add paths (repeatable):
 dupdetector --solution MyApp.sln --solution ./extra --format yaml --output dup-report.yaml
 ```
 
-Detect only method duplicates (exclude constructors and local functions):
+Detect only method duplicates (exclude constructors, local functions, and sliding windows):
 ```bash
 dupdetector ./src --detect methods
 ```
 
-## Duplication Scoring
+Detect all block types including sliding windows:
+```bash
+dupdetector ./src --detect methods,constructors,local-functions,windows
+```
+
+## Data Quality
+
+The following design decisions prevent misleading output on real-world solutions:
+
+| Issue | Fix |
+|-------|-----|
+| `duplicateLines > totalLines` (overcounting) | Overlapping intervals are merged per file before counting unique duplicate lines |
+| `duplicationScore = 100` from sliding windows | Sliding window blocks (`<window@N>`) are **off by default**; enable with `--detect windows` |
+| Mega near-dup clusters from generic patterns | Near-dup clusters exceeding `--max-cluster-spread` or `--max-cluster-occurrences` are discarded |
+| Test files masking production hotspots | Test files are annotated with a `[test]` badge in HTML; use `--exclude-test-files` to remove them |
+| Per-subdirectory "projects" instead of real ones | Files are grouped by their nearest `.csproj` ancestor, falling back to parent directory |
+| Default similarity too loose (0.85) | Raised to **0.90** — reduces false positives from structurally generic short methods |
+
+
 
 ### How the Score is Calculated
 

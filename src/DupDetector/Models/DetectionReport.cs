@@ -26,6 +26,11 @@ public class FileScore
     public int TotalLines { get; set; }
     /// <summary>Percentage of the file's lines that are duplicated (0–100).</summary>
     public double Score { get; set; }
+    /// <summary>
+    /// True when the file matches common test-project path heuristics
+    /// (path segment contains Tests/Test/Specs, or filename ends in Tests.cs/Spec.cs).
+    /// </summary>
+    public bool IsTestFile { get; set; }
 }
 
 public class ProjectScore

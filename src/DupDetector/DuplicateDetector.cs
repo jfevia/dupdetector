@@ -7,11 +7,28 @@ namespace DupDetector;
 /// </summary>
 public class DuplicateDetector
 {
-    public List<DuplicateCluster> Detect(List<CodeBlock> blocks, double similarityThreshold)
+    /// <summary>
+    /// Detects duplicate clusters from the given code blocks.
+    /// </summary>
+    /// <param name="blocks">All extracted code blocks to analyse.</param>
+    /// <param name="similarityThreshold">Jaccard threshold for near-duplicate grouping.</param>
+    /// <param name="maxClusterSpread">
+    /// Discard near-duplicate clusters whose file spread exceeds this value.
+    /// 0 means no limit. Applies only to near-duplicate clusters, not exact-match clusters.
+    /// </param>
+    /// <param name="maxClusterOccurrences">
+    /// Discard near-duplicate clusters whose occurrence count exceeds this value.
+    /// 0 means no limit. Applies only to near-duplicate clusters, not exact-match clusters.
+    /// </param>
+    public List<DuplicateCluster> Detect(
+        List<CodeBlock> blocks,
+        double similarityThreshold,
+        int maxClusterSpread = 0,
+        int maxClusterOccurrences = 0)
     {
         var clusters = new List<DuplicateCluster>();
 
-        // Step 1: Exact match detection - group by normalized hash
+        // Step 1: Exact match detection — group by normalized hash
         var exactGroups = blocks
             .GroupBy(b => b.NormalizedHash)
             .Where(g => g.Count() >= 2)
@@ -32,7 +49,17 @@ public class DuplicateDetector
         {
             var remaining = blocks.Where(b => !assignedBlocks.Contains(b)).ToList();
             var nearDupClusters = DetectNearDuplicates(remaining, similarityThreshold);
-            clusters.AddRange(nearDupClusters);
+
+            // Filter out oversized clusters that are likely generic-pattern false positives
+            foreach (var cluster in nearDupClusters)
+            {
+                bool tooLarge =
+                    (maxClusterSpread > 0 && cluster.Metrics.Spread > maxClusterSpread) ||
+                    (maxClusterOccurrences > 0 && cluster.Metrics.Occurrences > maxClusterOccurrences);
+
+                if (!tooLarge)
+                    clusters.Add(cluster);
+            }
         }
 
         // Step 3: Rank clusters by score descending
@@ -43,7 +70,6 @@ public class DuplicateDetector
     {
         if (blocks.Count < 2) return new List<DuplicateCluster>();
 
-        // Precompute token sets for Jaccard similarity
         var tokenSets = blocks.Select(b => TokenSet(b.NormalizedText)).ToList();
 
         // Union-Find for clustering
@@ -61,7 +87,6 @@ public class DuplicateDetector
             }
         }
 
-        // Group by root component
         var groups = new Dictionary<int, List<int>>();
         for (int i = 0; i < blocks.Count; i++)
         {
@@ -82,7 +107,6 @@ public class DuplicateDetector
                                    .OrderBy(b => b.FilePath)
                                    .ThenBy(b => b.StartLine)
                                    .ToList();
-            // Use hash of the first (canonical) block
             var cluster = BuildCluster(groupBlocks, groupBlocks[0].NormalizedHash);
             clusters.Add(cluster);
         }
@@ -108,8 +132,7 @@ public class DuplicateDetector
         var spread = instances.Select(b => b.FilePath).Distinct().Count();
         var score = (avgLines * occurrences * spread) / 100.0;
 
-        // Normalized 0–100 score: capped product of block size, spread, and occurrences.
-        // Max bucket: 50 lines × 10 occurrences × 5 files = 2500 → maps to 100.
+        // Normalized 0-100 score: capped product of block size, spread, and occurrences.
         var duplicationScore = Math.Round(
             Math.Min(100.0, (Math.Min(avgLines, 50) * Math.Min(occurrences, 10) * Math.Min(spread, 5)) / 25.0),
             2);
@@ -135,7 +158,6 @@ public class DuplicateDetector
 
     private static HashSet<string> TokenSet(string normalizedText)
     {
-        // Tokenize by splitting on whitespace and punctuation
         return normalizedText
             .Split(new[] { ' ', '\t', '\n', '\r', '{', '}', '(', ')', ';', ',', '.', '[', ']' },
                    StringSplitOptions.RemoveEmptyEntries)

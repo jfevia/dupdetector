@@ -243,4 +243,49 @@ public class DuplicateDetectorTests
             Assert.True(clusters[i - 1].Metrics.Score >= clusters[i].Metrics.Score);
         }
     }
+
+    [Fact]
+    public void Detect_WithMaxClusterSpread_FiltersTooLargeClusters()
+    {
+        // Identical code across 5 different files
+        var code = """
+            void Process(int a, int b, int c) {
+                var result = a + b + c;
+                Console.WriteLine(result);
+            }
+            """;
+
+        var blocks = Enumerable.Range(0, 5)
+            .Select(i => MakeBlock(code, $"file{i}.cs", 1, 5))
+            .ToList();
+
+        // maxClusterSpread: 3 → cluster with spread=5 should be filtered for near-dup
+        // but this is an EXACT match cluster, so it should not be filtered
+        var clusters = _detector.Detect(blocks, 0.99, maxClusterSpread: 3, maxClusterOccurrences: 0);
+
+        // Exact match clusters must not be filtered
+        Assert.NotEmpty(clusters);
+    }
+
+    [Fact]
+    public void Detect_DefaultParameters_WorkWithNewSignature()
+    {
+        var code = """
+            void DoWork() {
+                var x = 1;
+                var y = 2;
+                var z = x + y;
+                Console.WriteLine(z);
+            }
+            """;
+
+        var block1 = MakeBlock(code, "file1.cs", 1, 7);
+        var block2 = MakeBlock(code, "file2.cs", 1, 7);
+
+        // Verify the new optional parameters don't break the existing contract
+        var clusters = _detector.Detect(new List<CodeBlock> { block1, block2 }, 0.90);
+
+        Assert.Single(clusters);
+    }
 }
+

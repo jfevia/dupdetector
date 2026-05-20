@@ -19,7 +19,7 @@ public class ProjectLoader
         _options = options;
     }
 
-    public async Task<List<(string FilePath, SyntaxTree SyntaxTree, string SourceText)>> LoadAsync(string path)
+    public async Task<List<SourceDocument>> LoadAsync(string path)
     {
         if (File.Exists(path))
         {
@@ -32,15 +32,12 @@ public class ProjectLoader
                 }
                 catch (Exception ex)
                 {
-                    // MSBuildWorkspace may fail in CI environments without a full MSBuild installation.
-                    // Fall back to text-based parsing of the referenced files.
                     Console.Error.WriteLine($"[warn] MSBuildWorkspace failed ({ex.Message}), falling back to directory scan.");
                     var dir = Path.GetDirectoryName(path) ?? ".";
                     return LoadFromDirectory(dir);
                 }
             }
 
-            // Single .cs file
             if (ext == ".cs")
             {
                 return LoadFiles(new[] { path });
@@ -55,7 +52,7 @@ public class ProjectLoader
         throw new ArgumentException($"Path does not exist: {path}");
     }
 
-    private async Task<List<(string, SyntaxTree, string)>> LoadFromWorkspaceAsync(string path)
+    private async Task<List<SourceDocument>> LoadFromWorkspaceAsync(string path)
     {
         var ext = Path.GetExtension(path).ToLowerInvariant();
 
@@ -69,6 +66,8 @@ public class ProjectLoader
             Console.Error.WriteLine($"[workspace] {e.Diagnostic.Kind}: {e.Diagnostic.Message}");
 
         IEnumerable<Document> documents;
+        string? singleProjectName = null;
+
         if (ext == ".sln")
         {
             var solution = await workspace.OpenSolutionAsync(path);
@@ -77,10 +76,11 @@ public class ProjectLoader
         else
         {
             var project = await workspace.OpenProjectAsync(path);
+            singleProjectName = project.Name;
             documents = project.Documents;
         }
 
-        var results = new List<(string, SyntaxTree, string)>();
+        var results = new List<SourceDocument>();
         foreach (var doc in documents)
         {
             if (doc.FilePath == null) continue;
@@ -93,7 +93,8 @@ public class ProjectLoader
             var text = sourceText.ToString();
             if (!_options.IncludeGenerated && IsGeneratedFile(doc.FilePath, text)) continue;
 
-            results.Add((doc.FilePath, syntaxTree, text));
+            var projectName = singleProjectName ?? doc.Project.Name;
+            results.Add(new SourceDocument(doc.FilePath, syntaxTree, text, projectName));
         }
         return results;
     }
@@ -102,12 +103,11 @@ public class ProjectLoader
     /// Parses a .slnx solution filter file, extracts the referenced project paths,
     /// and loads each project via MSBuildWorkspace.
     /// </summary>
-    private async Task<List<(string, SyntaxTree, string)>> LoadFromSlnxAsync(string slnxPath)
+    private async Task<List<SourceDocument>> LoadFromSlnxAsync(string slnxPath)
     {
         var slnxDir = Path.GetDirectoryName(Path.GetFullPath(slnxPath)) ?? ".";
         var xml = XDocument.Load(slnxPath);
 
-        // Collect all <Project Path="..."> elements regardless of nesting depth.
         var projectPaths = xml.Descendants("Project")
             .Select(e => e.Attribute("Path")?.Value)
             .Where(p => !string.IsNullOrWhiteSpace(p))
@@ -119,14 +119,14 @@ public class ProjectLoader
         if (projectPaths.Count == 0)
         {
             Console.Error.WriteLine("[warn] No projects found in .slnx file.");
-            return new List<(string, SyntaxTree, string)>();
+            return new List<SourceDocument>();
         }
 
         using var workspace = MSBuildWorkspace.Create();
         workspace.WorkspaceFailed += (_, e) =>
             Console.Error.WriteLine($"[workspace] {e.Diagnostic.Kind}: {e.Diagnostic.Message}");
 
-        var results = new List<(string, SyntaxTree, string)>();
+        var results = new List<SourceDocument>();
         foreach (var projectPath in projectPaths)
         {
             try
@@ -144,7 +144,7 @@ public class ProjectLoader
                     var text = sourceText.ToString();
                     if (!_options.IncludeGenerated && IsGeneratedFile(doc.FilePath, text)) continue;
 
-                    results.Add((doc.FilePath, syntaxTree, text));
+                    results.Add(new SourceDocument(doc.FilePath, syntaxTree, text, project.Name));
                 }
             }
             catch (Exception ex)
@@ -156,7 +156,7 @@ public class ProjectLoader
         return results;
     }
 
-    private List<(string, SyntaxTree, string)> LoadFromDirectory(string dir)
+    private List<SourceDocument> LoadFromDirectory(string dir)
     {
         var files = Directory.EnumerateFiles(dir, "*.cs", SearchOption.AllDirectories)
             .Where(f => !ShouldExclude(f))
@@ -164,9 +164,9 @@ public class ProjectLoader
         return LoadFiles(files);
     }
 
-    private List<(string, SyntaxTree, string)> LoadFiles(IEnumerable<string> files)
+    private List<SourceDocument> LoadFiles(IEnumerable<string> files)
     {
-        var results = new List<(string, SyntaxTree, string)>();
+        var results = new List<SourceDocument>();
         foreach (var file in files)
         {
             try
@@ -175,7 +175,8 @@ public class ProjectLoader
                 if (!_options.IncludeGenerated && IsGeneratedFile(file, text)) continue;
 
                 var syntaxTree = CSharpSyntaxTree.ParseText(text, path: file);
-                results.Add((file, syntaxTree, text));
+                var projectName = FindNearestProjectName(file);
+                results.Add(new SourceDocument(file, syntaxTree, text, projectName));
             }
             catch (Exception ex)
             {
@@ -183,6 +184,25 @@ public class ProjectLoader
             }
         }
         return results;
+    }
+
+    /// <summary>
+    /// Walks up the directory tree from <paramref name="filePath"/> to find the nearest
+    /// .csproj file. Returns the project name (filename without extension), or the
+    /// immediate parent directory name if no .csproj is found.
+    /// </summary>
+    internal static string FindNearestProjectName(string filePath)
+    {
+        var dir = Path.GetDirectoryName(Path.GetFullPath(filePath));
+        while (dir != null)
+        {
+            var csproj = Directory.GetFiles(dir, "*.csproj").FirstOrDefault();
+            if (csproj != null)
+                return Path.GetFileNameWithoutExtension(csproj);
+            dir = Path.GetDirectoryName(dir);
+        }
+        var parent = Path.GetDirectoryName(Path.GetFullPath(filePath));
+        return parent != null ? Path.GetFileName(parent) : ".";
     }
 
     private bool ShouldExclude(string filePath)
@@ -208,7 +228,6 @@ public class ProjectLoader
     /// <summary>Simple glob matching supporting * and ? wildcards.</summary>
     private static bool GlobMatch(string pattern, string filePath)
     {
-        // Normalize separators
         filePath = filePath.Replace('\\', '/');
         pattern = pattern.Replace('\\', '/');
         return GlobMatchCore(pattern, filePath);

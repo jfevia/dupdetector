@@ -218,6 +218,7 @@ const PS={{projectScoresJson}};
     .tag{display:inline-block;padding:.1rem .45rem;border-radius:.25rem;font-size:.72rem;font-weight:600;background:#1e3a5f;color:#93c5fd}
     .tag.sp{background:#1e3a2f;color:#86efac}
     .tag.oc{background:#3b1f2f;color:#f9a8d4}
+    .tag.tf{background:#2d1a4a;color:#d8b4fe}
     .sr{display:flex;gap:.75rem;margin-bottom:1rem;align-items:center}
     .sr input{flex:1;background:#1e293b;border:1px solid #334155;border-radius:.5rem;padding:.5rem .75rem;color:#e2e8f0;font-size:.85rem;outline:none}
     .sr input:focus{border-color:#3b82f6}
@@ -290,7 +291,7 @@ function sf(p){const a=p.replace(/\\/g,'/').split('/');return a.length>3?'…/'+
   const el=document.getElementById('fc');
   const top=[...FS].sort((a,b)=>b.score-a.score).slice(0,20);
   if(!top.length){el.innerHTML='<p style="color:#64748b">No file data.</p>';return;}
-  el.innerHTML=top.map(f=>`<div class="bar-row" title="${esc(f.file)}"><span class="fname">${esc(sf(f.file))}</span><div class="bar-track"><div class="bar-fill" style="width:${f.score}%;background:${sc(f.score)}"></div></div><span class="pct">${f.score.toFixed(1)}%</span></div>`).join('');
+  el.innerHTML=top.map(f=>`<div class="bar-row" title="${esc(f.file)}"><span class="fname">${esc(sf(f.file))}${f.isTestFile?'<span class="tag tf" style="margin-left:.4rem;font-size:.65rem">test</span>':''}</span><div class="bar-track"><div class="bar-fill" style="width:${f.score}%;background:${sc(f.score)}"></div></div><span class="pct">${f.score.toFixed(1)}%</span></div>`).join('');
 })();
 (function(){
   const el=document.getElementById('pc');

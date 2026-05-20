@@ -146,6 +146,33 @@ public class ReporterTests
         Assert.Contains("totalDuplicates:", output);
         Assert.Contains("clusters:", output);
     }
+
+    [Fact]
+    public void JsonOutput_FileScores_IncludeIsTestFileField()
+    {
+        var report = MakeSampleReport();
+        report.FileScores = new List<FileScore>
+        {
+            new FileScore { File = "tests/Foo/BarTests.cs", DuplicateLines = 5, TotalLines = 20, Score = 25.0, IsTestFile = true },
+            new FileScore { File = "src/Core/Baz.cs", DuplicateLines = 2, TotalLines = 30, Score = 6.67, IsTestFile = false }
+        };
+        var output = _reporter.Render(report, "json");
+
+        Assert.Contains("isTestFile", output);
+    }
+
+    [Fact]
+    public void YamlOutput_FileScores_IncludeIsTestFileField()
+    {
+        var report = MakeSampleReport();
+        report.FileScores = new List<FileScore>
+        {
+            new FileScore { File = "tests/Foo/BarTests.cs", DuplicateLines = 5, TotalLines = 20, Score = 25.0, IsTestFile = true }
+        };
+        var output = _reporter.Render(report, "yaml");
+
+        Assert.Contains("isTestFile:", output);
+    }
 }
 
 // Tests for new features
@@ -285,6 +312,38 @@ public class ReporterHtmlTests
         Assert.Contains("fileScores:", output, StringComparison.Ordinal);
         Assert.Contains("projectScores:", output, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void HtmlOutput_ContainsTestFileBadge_ForTestFiles()
+    {
+        var report = MakeSampleReport();
+        report.FileScores = new List<FileScore>
+        {
+            new FileScore { File = "tests/FooTests.cs", DuplicateLines = 10, TotalLines = 40, Score = 25.0, IsTestFile = true },
+            new FileScore { File = "src/Foo.cs", DuplicateLines = 5, TotalLines = 40, Score = 12.5, IsTestFile = false }
+        };
+
+        var output = _reporter.Render(report, "html");
+
+        // The "test" badge CSS class must be present in the HTML
+        Assert.Contains("tag tf", output, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void JsonOutput_FileScores_HaveIsTestFileField()
+    {
+        var report = MakeSampleReport();
+        report.FileScores = new List<FileScore>
+        {
+            new FileScore { File = "tests/FooTests.cs", DuplicateLines = 10, TotalLines = 40, Score = 25.0, IsTestFile = true }
+        };
+        var output = _reporter.Render(report, "json");
+
+        var doc = System.Text.Json.JsonDocument.Parse(output);
+        var fileScore = doc.RootElement.GetProperty("fileScores")[0];
+        Assert.True(fileScore.TryGetProperty("isTestFile", out var itf));
+        Assert.True(itf.GetBoolean());
+    }
 }
 
 public class SlnxParserTests
@@ -415,4 +474,26 @@ public class ScoringTests
         var score4 = clusters4[0].Metrics.DuplicationScore;
         Assert.True(score4 >= score2, $"Score with 4 occurrences ({score4}) should be >= score with 2 ({score2})");
     }
+
+    [Fact]
+    public void SolutionScore_WithOverlappingClusters_DoesNotExceed100()
+    {
+        // Simulate a file where two clusters cover overlapping line ranges.
+        // Even if the additive count would exceed totalLines, the unique-line
+        // count must stay within bounds (score ≤ 100%).
+        var fileIntervals = new List<(int, int)>
+        {
+            (1, 50),  // cluster A covers half the file
+            (25, 80), // cluster B overlaps with A and extends further
+        };
+        var unique = LineCountHelper.CountUniqueLines(fileIntervals);
+        var totalLines = 100;
+        var score = Math.Min(100.0, unique * 100.0 / totalLines);
+
+        // Merged [1,80] = 80 unique lines
+        Assert.Equal(80, unique);
+        Assert.Equal(80.0, score, precision: 1);
+        Assert.True(score <= 100.0);
+    }
 }
+

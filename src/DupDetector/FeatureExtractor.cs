@@ -17,7 +17,7 @@ public record CodeBlock(
 );
 
 /// <summary>
-/// Extracts method-level and sub-method code blocks from C# syntax trees.
+/// Extracts method-level and (optionally) sub-method code blocks from C# syntax trees.
 /// </summary>
 public class FeatureExtractor
 {
@@ -28,7 +28,6 @@ public class FeatureExtractor
         var root = syntaxTree.GetRoot();
         var blocks = new List<CodeBlock>();
 
-        // Extract declarations based on the requested detection kinds
         var methodNodes = root.DescendantNodes().Where(n =>
             (kinds.HasFlag(DetectionKind.Methods) && n is MethodDeclarationSyntax) ||
             (kinds.HasFlag(DetectionKind.Constructors) && n is ConstructorDeclarationSyntax) ||
@@ -57,12 +56,18 @@ public class FeatureExtractor
 
             blocks.Add(new CodeBlock(filePath, startLine, endLine, methodName, hash, normalizedText, rawText, lineCount));
 
-            // Sliding window over statements inside the body
-            var body = GetBody(node);
-            if (body != null)
+            // Sliding window sub-method blocks are gated behind DetectionKind.Windows.
+            // They are disabled by default because they produce a very high false-positive
+            // rate: overlapping <window@N> fragments inflate cluster membership and spread
+            // counts far beyond genuine duplication (see GAP-3 in the tool report).
+            if (kinds.HasFlag(DetectionKind.Windows))
             {
-                var stmtBlocks = ExtractSlidingWindowBlocks(filePath, body, sourceText, minLines);
-                blocks.AddRange(stmtBlocks);
+                var body = GetBody(node);
+                if (body != null)
+                {
+                    var stmtBlocks = ExtractSlidingWindowBlocks(filePath, body, sourceText, minLines);
+                    blocks.AddRange(stmtBlocks);
+                }
             }
         }
 
@@ -90,7 +95,6 @@ public class FeatureExtractor
 
             if (lineCount < minLines) continue;
 
-            // Build a synthetic block node from the window statements
             var syntheticBlock = SyntaxFactory.Block(new SyntaxList<StatementSyntax>(windowStmts));
             var rawText = string.Join("\n", windowStmts.Select(s => ExtractText(sourceText, s.Span)));
             var hash = _normalizer.GetStructuralHash(syntheticBlock);
