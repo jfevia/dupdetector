@@ -28,13 +28,18 @@ public class DuplicateDetector
     /// Discard clusters whose project spread is below this value.
     /// Default: 1 (keep all clusters). Set to 2 to suppress intra-project clusters.
     /// </param>
+    /// <param name="minProdDupLines">
+    /// Minimum average line count for <c>isProductionDuplicate</c> to be set.
+    /// Default: 10. Suppresses false positives from short constructor/field patterns.
+    /// </param>
     public List<DuplicateCluster> Detect(
         List<CodeBlock> blocks,
         double similarityThreshold,
         int maxClusterSpread = 0,
         int maxClusterOccurrences = 0,
         int minClusterSpread = 1,
-        int minProjectSpread = 1)
+        int minProjectSpread = 1,
+        int minProdDupLines = 10)
     {
         var clusters = new List<DuplicateCluster>();
 
@@ -49,7 +54,7 @@ public class DuplicateDetector
         foreach (var group in exactGroups)
         {
             var instances = group.OrderBy(b => b.FilePath).ThenBy(b => b.StartLine).ToList();
-            var cluster = BuildCluster(instances, group.Key, isExact: true);
+            var cluster = BuildCluster(instances, group.Key, isExact: true, minProdDupLines: minProdDupLines);
             // Exact-match clusters below minClusterSpread are skipped but NOT added to assignedBlocks.
             // This keeps their blocks eligible for the near-dup phase, where they may form a larger
             // cross-file cluster that does meet the spread requirement.
@@ -130,7 +135,7 @@ public class DuplicateDetector
         return clusters;
     }
 
-    private static DuplicateCluster BuildCluster(List<CodeBlock> instances, string hashKey, bool isExact = false)
+    private static DuplicateCluster BuildCluster(List<CodeBlock> instances, string hashKey, bool isExact = false, int minProdDupLines = 10)
     {
         var id = $"dup-{hashKey[..Math.Min(8, hashKey.Length)]}";
 
@@ -140,7 +145,8 @@ public class DuplicateDetector
             StartLine = b.StartLine,
             EndLine = b.EndLine,
             Method = b.MethodName,
-            Hash = b.NormalizedHash
+            Hash = b.NormalizedHash,
+            ProjectName = b.ProjectName
         }).ToList();
 
         var avgLines = (int)Math.Round(instances.Average(b => b.LineCount));
@@ -177,7 +183,8 @@ public class DuplicateDetector
             RawSnippets = instances.Select(b => b.RawText).ToList(),
             IsExact = isExact,
             IsHighImpact = isExact && (avgLines * spread >= 100),
-            IsProductionDuplicate = isExact && projectSpread >= 2 && instances.All(b => !TestFileHelper.IsTestFile(b.FilePath))
+            IsProductionDuplicate = isExact && projectSpread >= 2 && avgLines >= minProdDupLines
+                && instances.All(b => !TestFileHelper.IsTestFile(b.FilePath))
         };
     }
 

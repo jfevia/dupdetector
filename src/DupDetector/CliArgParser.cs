@@ -67,6 +67,12 @@ public static class CliArgParser
                 case "--exclude-file-pattern" when i + 1 < args.Length:
                     opts.ExcludeFilePatterns.Add(args[++i]);
                     break;
+                case "--exclude-project-pattern" when i + 1 < args.Length:
+                    opts.ExcludeProjectPatterns.Add(args[++i]);
+                    break;
+                case "--min-prod-dup-lines" when i + 1 < args.Length:
+                    if (int.TryParse(args[++i], out var mpdl)) opts.MinProdDupLines = Math.Max(1, mpdl);
+                    break;
                 case "--detect" when i + 1 < args.Length:
                     // First --detect flag transitions from default (All) to an explicit inclusion set.
                     // Subsequent --detect flags accumulate into the same set.

@@ -63,4 +63,19 @@ public class DetectionOptions
     /// live exclusively in ArchUnitNET test files.
     /// </summary>
     public List<string> ExcludeFilePatterns { get; set; } = new();
+    /// <summary>
+    /// Case-insensitive substring patterns applied to cluster instance project names after detection.
+    /// A cluster is excluded when ALL of its instances belong to projects whose name contains
+    /// at least one of these patterns. Clusters that span matching and non-matching projects are kept.
+    /// Example: <c>--exclude-project-pattern ".Architecture."</c> suppresses clusters confined
+    /// to ArchUnitNET test projects.
+    /// </summary>
+    public List<string> ExcludeProjectPatterns { get; set; } = new();
+    /// <summary>
+    /// Minimum average line count required for <c>isProductionDuplicate</c> to be set.
+    /// Default: 10. Short clusters (constructors, field setters) frequently produce false positives
+    /// because normalization erases type names, making unrelated classes look identical.
+    /// Set to 1 to disable the threshold.
+    /// </summary>
+    public int MinProdDupLines { get; set; } = 10;
 }

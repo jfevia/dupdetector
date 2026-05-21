@@ -7,4 +7,6 @@ public class CodeInstance
     public int EndLine { get; set; }
     public string Method { get; set; } = "";
     public string Hash { get; set; } = "";
+    /// <summary>Project that owns this instance. Empty when project info is unavailable.</summary>
+    public string ProjectName { get; set; } = "";
 }

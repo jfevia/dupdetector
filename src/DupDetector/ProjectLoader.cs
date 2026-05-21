@@ -7,6 +7,11 @@ using Microsoft.CodeAnalysis.MSBuild;
 namespace DupDetector;
 
 /// <summary>
+/// Carries file discovery statistics from a single <see cref="ProjectLoader.LoadDetailedAsync"/> call.
+/// </summary>
+public record LoadStats(int DiscoveredFiles, int ExcludedFiles, string DiscoveryMode);
+
+/// <summary>
 /// Loads C# source documents from .sln, .slnx, .csproj, or directory paths.
 /// Falls back to text-based parsing when MSBuildWorkspace is unavailable.
 /// </summary>
@@ -21,6 +26,18 @@ public class ProjectLoader
 
     public async Task<List<SourceDocument>> LoadAsync(string path)
     {
+        var (docs, _) = await LoadDetailedAsync(path);
+        return docs;
+    }
+
+    /// <summary>
+    /// Loads source documents and returns discovery statistics alongside the documents.
+    /// </summary>
+    public async Task<(List<SourceDocument> Documents, LoadStats Stats)> LoadDetailedAsync(string path)
+    {
+        // Normalize to absolute path so all stored file paths are absolute regardless of CWD.
+        path = Path.GetFullPath(path);
+
         if (File.Exists(path))
         {
             var ext = Path.GetExtension(path).ToLowerInvariant();
@@ -52,7 +69,7 @@ public class ProjectLoader
         throw new ArgumentException($"Path does not exist: {path}");
     }
 
-    private async Task<List<SourceDocument>> LoadFromWorkspaceAsync(string path)
+    private async Task<(List<SourceDocument>, LoadStats)> LoadFromWorkspaceAsync(string path)
     {
         var ext = Path.GetExtension(path).ToLowerInvariant();
 
@@ -87,29 +104,31 @@ public class ProjectLoader
         }
 
         var results = new List<SourceDocument>();
+        int discovered = 0, excluded = 0;
         foreach (var doc in documents)
         {
             if (doc.FilePath == null) continue;
-            if (ShouldExclude(doc.FilePath)) continue;
+            discovered++;
+            if (ShouldExclude(doc.FilePath)) { excluded++; continue; }
 
             var sourceText = await doc.GetTextAsync();
             var syntaxTree = await doc.GetSyntaxTreeAsync();
             if (syntaxTree == null) continue;
 
             var text = sourceText.ToString();
-            if (!_options.IncludeGenerated && IsGeneratedFile(doc.FilePath, text)) continue;
+            if (!_options.IncludeGenerated && IsGeneratedFile(doc.FilePath, text)) { excluded++; continue; }
 
             var projectName = singleProjectName ?? doc.Project.Name;
             results.Add(new SourceDocument(doc.FilePath, syntaxTree, text, projectName));
         }
-        return results;
+        return (results, new LoadStats(discovered, excluded, "workspace"));
     }
 
     /// <summary>
     /// Parses a .slnx solution filter file, extracts the referenced project paths,
     /// and loads each project via MSBuildWorkspace.
     /// </summary>
-    private async Task<List<SourceDocument>> LoadFromSlnxAsync(string slnxPath)
+    private async Task<(List<SourceDocument>, LoadStats)> LoadFromSlnxAsync(string slnxPath)
     {
         var slnxDir = Path.GetDirectoryName(Path.GetFullPath(slnxPath)) ?? ".";
         var xml = XDocument.Load(slnxPath);
@@ -125,7 +144,7 @@ public class ProjectLoader
         if (projectPaths.Count == 0)
         {
             Console.Error.WriteLine("[warn] No projects found in .slnx file.");
-            return new List<SourceDocument>();
+            return (new List<SourceDocument>(), new LoadStats(0, 0, "workspace"));
         }
 
         using var workspace = MSBuildWorkspace.Create();
@@ -137,12 +156,10 @@ public class ProjectLoader
         };
 
         var results = new List<SourceDocument>();
+        int discovered = 0, excluded = 0;
         foreach (var projectPath in projectPaths)
         {
             // Proactively skip projects already loaded as transitive dependencies.
-            // This avoids the "already part of the workspace" warnings that fire
-            // when MSBuildWorkspace encounters a project it previously loaded while
-            // opening another project's dependencies.
             if (workspace.CurrentSolution.Projects.Any(p =>
                 string.Equals(p.FilePath, projectPath, StringComparison.OrdinalIgnoreCase)))
                 continue;
@@ -153,58 +170,66 @@ public class ProjectLoader
                 foreach (var doc in project.Documents)
                 {
                     if (doc.FilePath == null) continue;
-                    if (ShouldExclude(doc.FilePath)) continue;
+                    discovered++;
+                    if (ShouldExclude(doc.FilePath)) { excluded++; continue; }
 
                     var sourceText = await doc.GetTextAsync();
                     var syntaxTree = await doc.GetSyntaxTreeAsync();
                     if (syntaxTree == null) continue;
 
                     var text = sourceText.ToString();
-                    if (!_options.IncludeGenerated && IsGeneratedFile(doc.FilePath, text)) continue;
+                    if (!_options.IncludeGenerated && IsGeneratedFile(doc.FilePath, text)) { excluded++; continue; }
 
                     results.Add(new SourceDocument(doc.FilePath, syntaxTree, text, project.Name));
                 }
             }
             catch (Exception ex)
             {
-                // Suppress transitive-reference duplicate exceptions — same as the WorkspaceFailed handler above.
                 if (ex.Message.Contains("already part of the workspace", StringComparison.OrdinalIgnoreCase))
                     continue;
                 Console.Error.WriteLine($"[warn] Failed to load project '{projectPath}': {ex.Message}");
             }
         }
 
-        return results;
+        return (results, new LoadStats(discovered, excluded, "workspace"));
     }
 
-    private List<SourceDocument> LoadFromDirectory(string dir)
+    private (List<SourceDocument>, LoadStats) LoadFromDirectory(string dir)
     {
-        var files = Directory.EnumerateFiles(dir, "*.cs", SearchOption.AllDirectories)
-            .Where(f => !ShouldExclude(f))
-            .ToList();
-        return LoadFiles(files);
+        var allFiles = Directory.EnumerateFiles(dir, "*.cs", SearchOption.AllDirectories).ToList();
+        int discovered = allFiles.Count;
+        int excluded = allFiles.Count(f => ShouldExclude(f));
+        var kept = allFiles.Where(f => !ShouldExclude(f)).ToList();
+        var (docs, _) = LoadFiles(kept);
+        // Subtract any additionally excluded by generated-file filter
+        int genExcluded = kept.Count - docs.Count;
+        return (docs, new LoadStats(discovered, excluded + genExcluded, "filesystem"));
     }
 
-    private List<SourceDocument> LoadFiles(IEnumerable<string> files)
+    private (List<SourceDocument>, LoadStats) LoadFiles(IEnumerable<string> files)
     {
         var results = new List<SourceDocument>();
+        int discovered = 0, excluded = 0;
         foreach (var file in files)
         {
+            discovered++;
             try
             {
-                var text = File.ReadAllText(file);
-                if (!_options.IncludeGenerated && IsGeneratedFile(file, text)) continue;
+                var absoluteFile = Path.GetFullPath(file);
+                var text = File.ReadAllText(absoluteFile);
+                if (!_options.IncludeGenerated && IsGeneratedFile(absoluteFile, text)) { excluded++; continue; }
 
-                var syntaxTree = CSharpSyntaxTree.ParseText(text, path: file);
-                var projectName = FindNearestProjectName(file);
-                results.Add(new SourceDocument(file, syntaxTree, text, projectName));
+                var syntaxTree = CSharpSyntaxTree.ParseText(text, path: absoluteFile);
+                var projectName = FindNearestProjectName(absoluteFile);
+                results.Add(new SourceDocument(absoluteFile, syntaxTree, text, projectName));
             }
             catch (Exception ex)
             {
                 Console.Error.WriteLine($"[warn] Failed to read {file}: {ex.Message}");
+                excluded++;
             }
         }
-        return results;
+        return (results, new LoadStats(discovered, excluded, "filesystem"));
     }
 
     /// <summary>
@@ -240,7 +265,11 @@ public class ProjectLoader
     internal bool IsExcluded(string filePath) => ShouldExclude(filePath);
 
     /// <summary>Internal helper exposed for unit testing.</summary>
-    internal List<SourceDocument> LoadFromDirectoryInternal(string dir) => LoadFromDirectory(dir);
+    internal List<SourceDocument> LoadFromDirectoryInternal(string dir)
+    {
+        var (docs, _) = LoadFromDirectory(dir);
+        return docs;
+    }
 
     /// <summary>
     /// Returns <c>true</c> when the file resides inside a build-artifact directory

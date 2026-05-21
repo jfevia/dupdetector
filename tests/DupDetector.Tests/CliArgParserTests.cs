@@ -24,9 +24,11 @@ public class CliArgParserTests
         Assert.Equal(2, opts.MinProjectSpread);
         Assert.Equal(20, opts.MaxClusterSpread);
         Assert.Equal(50, opts.MaxClusterOccurrences);
+        Assert.Equal(10, opts.MinProdDupLines);
         Assert.False(opts.IncludeGenerated);
         Assert.False(opts.ExcludeTestFiles);
         Assert.Empty(opts.Exclude);
+        Assert.Empty(opts.ExcludeProjectPatterns);
         Assert.Empty(opts.OutputPath);
     }
 
@@ -323,5 +325,65 @@ public class CliArgParserTests
         Assert.Equal("IArchRule", opts.ExcludePatterns[0]);
         Assert.Single(opts.ExcludeFilePatterns);
         Assert.Equal("**/Arch/*.cs", opts.ExcludeFilePatterns[0]);
+    }
+
+    // ──── --exclude-project-pattern flag (GAP-A2, Run 7) ─────────────────────
+
+    [Fact]
+    public void ExcludeProjectPatterns_Default_IsEmpty()
+    {
+        var opts = CliArgParser.Parse(["path.sln"]);
+        Assert.Empty(opts.ExcludeProjectPatterns);
+    }
+
+    [Fact]
+    public void ExcludeProjectPatternFlag_SingleValue_IsParsed()
+    {
+        var opts = CliArgParser.Parse(["path.sln", "--exclude-project-pattern", ".Architecture."]);
+        Assert.Single(opts.ExcludeProjectPatterns);
+        Assert.Equal(".Architecture.", opts.ExcludeProjectPatterns[0]);
+    }
+
+    [Fact]
+    public void ExcludeProjectPatternFlag_IsRepeatable()
+    {
+        var opts = CliArgParser.Parse([
+            "path.sln",
+            "--exclude-project-pattern", ".Architecture.",
+            "--exclude-project-pattern", ".Tests."
+        ]);
+        Assert.Equal(2, opts.ExcludeProjectPatterns.Count);
+        Assert.Contains(".Architecture.", opts.ExcludeProjectPatterns);
+        Assert.Contains(".Tests.", opts.ExcludeProjectPatterns);
+    }
+
+    // ──── --min-prod-dup-lines flag (GAP-K2, Run 7) ──────────────────────────
+
+    [Fact]
+    public void MinProdDupLines_Default_IsTen()
+    {
+        var opts = CliArgParser.Parse(["path.sln"]);
+        Assert.Equal(10, opts.MinProdDupLines);
+    }
+
+    [Fact]
+    public void MinProdDupLinesFlag_IsParsed()
+    {
+        var opts = CliArgParser.Parse(["path.sln", "--min-prod-dup-lines", "15"]);
+        Assert.Equal(15, opts.MinProdDupLines);
+    }
+
+    [Fact]
+    public void MinProdDupLinesFlag_Zero_ClampedToOne()
+    {
+        var opts = CliArgParser.Parse(["path.sln", "--min-prod-dup-lines", "0"]);
+        Assert.Equal(1, opts.MinProdDupLines);
+    }
+
+    [Fact]
+    public void MinProdDupLinesFlag_One_DisablesThreshold()
+    {
+        var opts = CliArgParser.Parse(["path.sln", "--min-prod-dup-lines", "1"]);
+        Assert.Equal(1, opts.MinProdDupLines);
     }
 }

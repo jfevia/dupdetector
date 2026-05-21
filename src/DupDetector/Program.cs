@@ -21,8 +21,10 @@ if (options.InputPaths.Count == 0)
     Console.Error.WriteLine("  --min-project-spread <int>          Discard clusters with project spread below this (default: 1). Set to 2 to suppress intra-project clusters");
     Console.Error.WriteLine("  --max-cluster-occurrences <int>     Discard near-dup clusters with occurrences above this (default: 50, 0=unlimited)");
     Console.Error.WriteLine("  --exclude-test-files                Omit test files from file/project score output");
-    Console.Error.WriteLine("  --exclude-pattern <text>            Remove clusters whose normalized snippet contains this text, case-insensitive (repeatable)");
+    Console.Error.WriteLine("  --exclude-pattern <text>            Remove clusters whose raw snippet contains this text, case-insensitive (repeatable)");
     Console.Error.WriteLine("  --exclude-file-pattern <glob>       Remove clusters where ALL instances are in matching files, e.g. \"**/Arch/*.cs\" (repeatable)");
+    Console.Error.WriteLine("  --exclude-project-pattern <text>    Remove clusters where ALL instances are in projects matching this text, case-insensitive (repeatable)");
+    Console.Error.WriteLine("  --min-prod-dup-lines <int>          Minimum avg lines for isProductionDuplicate (default: 10). Set to 1 to disable");
     return 1;
 }
 
@@ -31,11 +33,23 @@ try
     // 1. Load source files from all specified paths
     var loader = new ProjectLoader(options);
     var allDocs = new List<SourceDocument>();
+    int totalDiscovered = 0, totalExcluded = 0;
+    var discoveryModes = new HashSet<string>();
     foreach (var inputPath in options.InputPaths)
     {
-        var docs = await loader.LoadAsync(inputPath);
+        var (docs, stats) = await loader.LoadDetailedAsync(inputPath);
         allDocs.AddRange(docs);
+        totalDiscovered += stats.DiscoveredFiles;
+        totalExcluded += stats.ExcludedFiles;
+        discoveryModes.Add(stats.DiscoveryMode);
     }
+    var discoveryMode = discoveryModes.Count switch
+    {
+        0 => "",
+        1 => discoveryModes.First(),
+        _ => "mixed"
+    };
+
     // Deduplicate by file path (a file may be reachable via multiple input paths)
     var documents = allDocs
         .GroupBy(d => d.FilePath, StringComparer.OrdinalIgnoreCase)
@@ -53,7 +67,7 @@ try
 
     // 3. Detect duplicates
     var detector = new DuplicateDetector();
-    var clusters = detector.Detect(allBlocks, options.Similarity, options.MaxClusterSpread, options.MaxClusterOccurrences, options.MinClusterSpread, options.MinProjectSpread);
+    var clusters = detector.Detect(allBlocks, options.Similarity, options.MaxClusterSpread, options.MaxClusterOccurrences, options.MinClusterSpread, options.MinProjectSpread, options.MinProdDupLines);
 
     // Apply --exclude-pattern filters (case-insensitive substring match against raw snippet text).
     if (options.ExcludePatterns.Count > 0)
@@ -71,6 +85,16 @@ try
         clusters = clusters
             .Where(c => !c.Instances.All(inst =>
                 options.ExcludeFilePatterns.Any(p => FilePatternMatcher.IsMatch(p, inst.File))))
+            .ToList();
+    }
+
+    // Apply --exclude-project-pattern filters: remove clusters where ALL instances are in matching projects.
+    if (options.ExcludeProjectPatterns.Count > 0)
+    {
+        clusters = clusters
+            .Where(c => !c.Instances.All(inst =>
+                options.ExcludeProjectPatterns.Any(p =>
+                    inst.ProjectName.Contains(p, StringComparison.OrdinalIgnoreCase))))
             .ToList();
     }
 
@@ -196,7 +220,10 @@ try
             TotalDuplicates = clusters.Count,
             TotalDuplicateLines = totalDuplicateLines,
             DuplicationScore = solutionScore,
-            ScoreLabel = scoreLabel
+            ScoreLabel = scoreLabel,
+            DiscoveredFiles = totalDiscovered,
+            ExcludedFiles = totalExcluded,
+            DiscoveryMode = discoveryMode
         },
         Clusters = clusters,
         FileScores = fileScores,

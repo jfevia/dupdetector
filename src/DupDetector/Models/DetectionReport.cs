@@ -17,6 +17,16 @@ public class ReportSummary
     public double DuplicationScore { get; set; }
     /// <summary>Human-readable label: low / medium / high / critical.</summary>
     public string ScoreLabel { get; set; } = "low";
+    /// <summary>Total .cs files found before exclusions (including generated and --exclude matches).</summary>
+    public int DiscoveredFiles { get; set; }
+    /// <summary>Files removed by --exclude globs, --include-generated filter, or obj/bin artifact filter.</summary>
+    public int ExcludedFiles { get; set; }
+    /// <summary>How files were discovered: "workspace" (.sln/.csproj via MSBuild), "filesystem" (directory scan), or "mixed".</summary>
+    public string DiscoveryMode { get; set; } = "";
+    /// <summary>Capped scoring formula used for the cluster <c>score</c> field.</summary>
+    public string ScoreFormula { get; set; } = "min(100, (min(L,50)×min(occ,25)×min(spread,10))/125)";
+    /// <summary>Uncapped linear formula used for the cluster <c>rawScore</c> field.</summary>
+    public string RawScoreFormula { get; set; } = "L×occ×spread/100  (uncapped linear, for reference)";
 }
 
 public class FileScore
