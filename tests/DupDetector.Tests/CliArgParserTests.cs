@@ -281,40 +281,47 @@ public class CliArgParserTests
         Assert.Equal(50, opts.MaxClusterOccurrences);
     }
 
-    // ──── --exclude-pattern flag (GAP-A, Run 5) ──────────────────────────────
+    // ──── --exclude-file-pattern flag (GAP-L) ────────────────────────────────
 
     [Fact]
-    public void ExcludePatterns_Default_IsEmpty()
+    public void ExcludeFilePatterns_Default_IsEmpty()
     {
         var opts = CliArgParser.Parse(["path.sln"]);
-        Assert.Empty(opts.ExcludePatterns);
+        Assert.Empty(opts.ExcludeFilePatterns);
     }
 
     [Fact]
-    public void ExcludePatternFlag_SingleValue_IsParsed()
+    public void ExcludeFilePatternFlag_SingleValue_IsParsed()
     {
-        var opts = CliArgParser.Parse(["path.sln", "--exclude-pattern", "IArchRule"]);
-        Assert.Single(opts.ExcludePatterns);
-        Assert.Equal("IArchRule", opts.ExcludePatterns[0]);
+        var opts = CliArgParser.Parse(["path.sln", "--exclude-file-pattern", "**/Arch/*.cs"]);
+        Assert.Single(opts.ExcludeFilePatterns);
+        Assert.Equal("**/Arch/*.cs", opts.ExcludeFilePatterns[0]);
     }
 
     [Fact]
-    public void ExcludePatternFlag_IsRepeatable()
+    public void ExcludeFilePatternFlag_IsRepeatable()
+    {
+        var opts = CliArgParser.Parse([
+            "path.sln",
+            "--exclude-file-pattern", "**/Arch/*.cs",
+            "--exclude-file-pattern", "**/Generated/**"
+        ]);
+        Assert.Equal(2, opts.ExcludeFilePatterns.Count);
+        Assert.Contains("**/Arch/*.cs", opts.ExcludeFilePatterns);
+        Assert.Contains("**/Generated/**", opts.ExcludeFilePatterns);
+    }
+
+    [Fact]
+    public void ExcludeFilePatternAndExcludePattern_CombinedCorrectly()
     {
         var opts = CliArgParser.Parse([
             "path.sln",
             "--exclude-pattern", "IArchRule",
-            "--exclude-pattern", "SomeBoilerplate"
+            "--exclude-file-pattern", "**/Arch/*.cs"
         ]);
-        Assert.Equal(2, opts.ExcludePatterns.Count);
-        Assert.Contains("IArchRule", opts.ExcludePatterns);
-        Assert.Contains("SomeBoilerplate", opts.ExcludePatterns);
-    }
-
-    [Fact]
-    public void ExcludePatternFlag_PreservesWhitespaceAndCase()
-    {
-        var opts = CliArgParser.Parse(["path.sln", "--exclude-pattern", "  MyPattern  "]);
-        Assert.Equal("  MyPattern  ", opts.ExcludePatterns[0]);
+        Assert.Single(opts.ExcludePatterns);
+        Assert.Equal("IArchRule", opts.ExcludePatterns[0]);
+        Assert.Single(opts.ExcludeFilePatterns);
+        Assert.Equal("**/Arch/*.cs", opts.ExcludeFilePatterns[0]);
     }
 }

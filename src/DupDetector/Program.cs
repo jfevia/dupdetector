@@ -22,6 +22,7 @@ if (options.InputPaths.Count == 0)
     Console.Error.WriteLine("  --max-cluster-occurrences <int>     Discard near-dup clusters with occurrences above this (default: 50, 0=unlimited)");
     Console.Error.WriteLine("  --exclude-test-files                Omit test files from file/project score output");
     Console.Error.WriteLine("  --exclude-pattern <text>            Remove clusters whose normalized snippet contains this text, case-insensitive (repeatable)");
+    Console.Error.WriteLine("  --exclude-file-pattern <glob>       Remove clusters where ALL instances are in matching files, e.g. \"**/Arch/*.cs\" (repeatable)");
     return 1;
 }
 
@@ -60,6 +61,16 @@ try
         clusters = clusters
             .Where(c => !options.ExcludePatterns.Any(p =>
                 c.RawSnippets.Any(raw => raw.Contains(p, StringComparison.OrdinalIgnoreCase))))
+            .ToList();
+    }
+
+    // Apply --exclude-file-pattern filters: remove clusters where every instance is in a matching file.
+    // Clusters that span both matching and non-matching files are preserved.
+    if (options.ExcludeFilePatterns.Count > 0)
+    {
+        clusters = clusters
+            .Where(c => !c.Instances.All(inst =>
+                options.ExcludeFilePatterns.Any(p => FilePatternMatcher.IsMatch(p, inst.File))))
             .ToList();
     }
 

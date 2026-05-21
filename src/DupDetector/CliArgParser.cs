@@ -64,6 +64,9 @@ public static class CliArgParser
                 case "--exclude-pattern" when i + 1 < args.Length:
                     opts.ExcludePatterns.Add(args[++i]);
                     break;
+                case "--exclude-file-pattern" when i + 1 < args.Length:
+                    opts.ExcludeFilePatterns.Add(args[++i]);
+                    break;
                 case "--detect" when i + 1 < args.Length:
                     // First --detect flag transitions from default (All) to an explicit inclusion set.
                     // Subsequent --detect flags accumulate into the same set.

@@ -300,7 +300,7 @@ public class ExactDuplicateFlagTests
     }
 
     [Fact]
-    public void ExactDuplicate_MixedTestAndProductionFiles_IsProductionDuplicate_IsTrue()
+    public void ExactDuplicate_MixedTestAndProductionFiles_IsProductionDuplicate_IsFalse()
     {
         var code = """
             void Configure() {
@@ -311,7 +311,7 @@ public class ExactDuplicateFlagTests
                 return svc.BuildServiceProvider();
             }
             """;
-        // One test, one production file
+        // One test file + one production file — cluster is NOT all-production, so IsFalse (GAP-K fix)
         var b1 = MakeBlock(code, @"tests\ProjectA.Tests\HostTests.cs");
         var b2 = MakeBlock(code, @"src\ProjectB\Host.cs");
 
@@ -321,8 +321,8 @@ public class ExactDuplicateFlagTests
         Assert.Single(clusters);
         var c = clusters[0];
         Assert.True(c.IsExact);
-        Assert.True(c.IsProductionDuplicate,
-            "Cluster with at least one non-test file and projectSpread >= 2 should be IsProductionDuplicate=true");
+        Assert.False(c.IsProductionDuplicate,
+            "Cluster with at least one test-file instance should NOT be IsProductionDuplicate (GAP-K: must be ALL non-test)");
     }
 
     [Fact]

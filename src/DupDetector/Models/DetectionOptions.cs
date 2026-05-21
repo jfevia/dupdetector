@@ -53,4 +53,14 @@ public class DetectionOptions
     /// Multiple patterns are OR-combined — a cluster matching any pattern is excluded.
     /// </summary>
     public List<string> ExcludePatterns { get; set; } = new();
+    /// <summary>
+    /// Glob patterns applied to cluster instance file paths after detection.
+    /// A cluster is excluded when <em>all</em> of its instances reside in files matching
+    /// at least one of these patterns. Clusters that span both matching and non-matching
+    /// files are kept. Supports <c>*</c> (within a path segment) and <c>**</c> (across
+    /// zero or more segments). Case-insensitive.
+    /// Example: <c>--exclude-file-pattern "**/Arch/*.cs"</c> suppresses clusters that
+    /// live exclusively in ArchUnitNET test files.
+    /// </summary>
+    public List<string> ExcludeFilePatterns { get; set; } = new();
 }
