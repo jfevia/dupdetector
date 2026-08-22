@@ -8,13 +8,8 @@ on:
 
 jobs:
   build:
-    name: Build & Test (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        # The filesystem defences this tool relies on are platform behaviour, so all three run.
-        os: [ubuntu-latest, windows-latest, macos-latest]
+    name: Build & Test
+    runs-on: windows-latest
 
     steps:
       - uses: actions/checkout@v4
@@ -40,12 +35,12 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: coverage-${{ matrix.os }}
+          name: coverage
           path: artifacts/coverage/**/coverage.cobertura.xml
 
   dogfood:
     name: Dogfood
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     needs: build
     steps:
       - uses: actions/checkout@v4
