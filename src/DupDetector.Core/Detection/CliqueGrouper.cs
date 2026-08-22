@@ -1,46 +1,23 @@
 ﻿namespace DupDetector.Core.Detection;
 
 /// <summary>
-/// Limits on clique enumeration, which is exponential in the worst case.
+///     Turns similar pairs into groups of mutually similar blocks.
 /// </summary>
-/// <param name="MaxGroupSize">
-/// Largest connected component that will be enumerated exactly. Larger components fall back.
-/// </param>
-/// <param name="MaxWork">
-/// Ceiling on recursive expansion steps within one component before it falls back.
-/// </param>
-public readonly record struct CliqueBudget(int MaxGroupSize, int MaxWork)
-{
-    public static CliqueBudget Default { get; } = new(64, 20_000);
-}
-
-/// <summary>
-/// A set of mutually similar block indices.
-/// </summary>
-/// <param name="Members">Block indices, ascending.</param>
-/// <param name="IsCohesive">
-/// <c>false</c> when the budget was exhausted and this group was produced by connectivity alone,
-/// meaning some members may not be similar to one another.
-/// </param>
-public sealed record SimilarityGroup(IReadOnlyList<int> Members, bool IsCohesive);
-
-/// <summary>
-/// Turns similar pairs into groups of mutually similar blocks.
-/// </summary>
-// Similarity is not transitive, so a connectivity grouping would merge blocks that share nothing.
-// Clique enumeration is exponential, so a component exceeding the budget degrades to connectivity.
 public static class CliqueGrouper
 {
     /// <summary>
-    /// Returns every maximal group of at least two mutually similar blocks.
+    ///     Returns every maximal group of at least two mutually similar blocks.
     /// </summary>
+    /// <param name="blockCount">The number of blocks the pair indices refer to.</param>
+    /// <param name="pairs">The similar pairs found by the join.</param>
+    /// <param name="budget">The ceiling on enumeration work.</param>
+    /// <returns>The groups, ordered deterministically.</returns>
     public static IReadOnlyList<SimilarityGroup> Group(
         int blockCount,
         IReadOnlyList<SimilarPair> pairs,
         CliqueBudget budget)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(blockCount);
-        ArgumentNullException.ThrowIfNull(pairs);
 
         if (pairs.Count == 0)
         {
@@ -52,36 +29,51 @@ public static class CliqueGrouper
 
         foreach (var component in Components(blockCount, neighbours))
         {
-            if (component.Count > budget.MaxGroupSize)
-            {
-                groups.Add(new SimilarityGroup(component, IsCohesive: false));
-                continue;
-            }
-
-            var work = 0;
-            var cliques = new List<List<int>>();
-            var candidates = new HashSet<int>(component);
-
-            Expand([], candidates, [], neighbours, cliques, budget, ref work);
-
-            if (work > budget.MaxWork)
-            {
-                groups.Add(new SimilarityGroup(component, IsCohesive: false));
-                continue;
-            }
-
-            foreach (var clique in cliques.Where(clique => clique.Count >= 2))
-            {
-                clique.Sort();
-                groups.Add(new SimilarityGroup(clique, IsCohesive: true));
-            }
+            AddComponent(component, neighbours, budget, groups);
         }
 
-        // Deterministic order regardless of traversal.
-        return [.. groups
-            .OrderBy(group => group.Members[0])
-            .ThenBy(group => group.Members.Count)
-            .ThenBy(group => string.Join(',', group.Members), StringComparer.Ordinal)];
+        groups.Sort(CompareGroups);
+        return groups;
+    }
+
+    private static void AddComponent(
+        List<int> component,
+        Dictionary<int, HashSet<int>> neighbours,
+        CliqueBudget budget,
+        List<SimilarityGroup> groups)
+    {
+        if (component.Count > budget.MaxGroupSize)
+        {
+            var degraded = new SimilarityGroup(component, isCohesive: false);
+            groups.Add(degraded);
+            return;
+        }
+
+        var state = new Enumeration(neighbours, budget);
+        var candidates = new HashSet<int>(component);
+        var current = new List<int>();
+        var excluded = new HashSet<int>();
+
+        Expand(current, candidates, excluded, state);
+
+        if (state.IsExhausted)
+        {
+            var degraded = new SimilarityGroup(component, isCohesive: false);
+            groups.Add(degraded);
+            return;
+        }
+
+        foreach (var clique in state.Cliques)
+        {
+            if (clique.Count < 2)
+            {
+                continue;
+            }
+
+            clique.Sort();
+            var group = new SimilarityGroup(clique, isCohesive: true);
+            groups.Add(group);
+        }
     }
 
     private static Dictionary<int, HashSet<int>> BuildAdjacency(int blockCount, IReadOnlyList<SimilarPair> pairs)
@@ -100,18 +92,26 @@ public static class CliqueGrouper
         return neighbours;
     }
 
-    private static void Link(Dictionary<int, HashSet<int>> neighbours, int from, int to)
+    private static int CompareGroups(SimilarityGroup left, SimilarityGroup right)
     {
-        if (!neighbours.TryGetValue(from, out var set))
+        var byFirst = left.Members[0].CompareTo(right.Members[0]);
+        if (byFirst != 0)
         {
-            set = [];
-            neighbours[from] = set;
+            return byFirst;
         }
 
-        set.Add(to);
+        var bySize = left.Members.Count.CompareTo(right.Members.Count);
+        return bySize != 0
+            ? bySize
+            : string.CompareOrdinal(string.Join(',', left.Members), string.Join(',', right.Members));
     }
 
-    /// <summary>Connected components of the similarity graph, each ascending.</summary>
+    /// <summary>
+    ///     Connected components of the similarity graph, each ascending.
+    /// </summary>
+    /// <param name="blockCount">The number of blocks to consider.</param>
+    /// <param name="neighbours">The adjacency map.</param>
+    /// <returns>The components, each sorted ascending.</returns>
     private static List<List<int>> Components(int blockCount, Dictionary<int, HashSet<int>> neighbours)
     {
         var seen = new HashSet<int>();
@@ -124,7 +124,10 @@ public static class CliqueGrouper
                 continue;
             }
 
-            var component = new List<int> { start };
+            var component = new List<int>
+            {
+                start
+            };
             var queue = new Queue<int>();
             queue.Enqueue(start);
 
@@ -148,47 +151,120 @@ public static class CliqueGrouper
     }
 
     /// <summary>
-    /// Bron-Kerbosch enumeration of maximal cliques, abandoned once the budget is spent. The budget
-    /// is checked at the recursion site rather than on entry, so there is only one guard.
+    ///     Bron-Kerbosch enumeration of maximal cliques, abandoned once the budget is spent.
     /// </summary>
+    /// <param name="current">The clique built so far.</param>
+    /// <param name="candidates">Vertices that may still extend the clique.</param>
+    /// <param name="excluded">Vertices already tried at this level.</param>
+    /// <param name="state">The shared enumeration state.</param>
     private static void Expand(
         List<int> current,
         HashSet<int> candidates,
         HashSet<int> excluded,
-        Dictionary<int, HashSet<int>> neighbours,
-        List<List<int>> cliques,
-        CliqueBudget budget,
-        ref int work)
+        Enumeration state)
     {
-        work++;
+        state.RecordStep();
 
         if (candidates.Count == 0 && excluded.Count == 0)
         {
-            cliques.Add([.. current]);
+            var clique = new List<int>(current);
+            state.Cliques.Add(clique);
             return;
         }
 
-        foreach (var vertex in candidates.Order().ToArray())
+        var ordered = new List<int>(candidates);
+        ordered.Sort();
+
+        foreach (var vertex in ordered)
         {
-            if (work > budget.MaxWork)
+            if (state.IsExhausted)
             {
                 return;
             }
 
-            var adjacent = neighbours[vertex];
+            var adjacent = state.Neighbours[vertex];
             current.Add(vertex);
-            Expand(
-                current,
-                [.. candidates.Where(adjacent.Contains)],
-                [.. excluded.Where(adjacent.Contains)],
-                neighbours,
-                cliques,
-                budget,
-                ref work);
+            Expand(current, Intersect(candidates, adjacent), Intersect(excluded, adjacent), state);
             current.RemoveAt(current.Count - 1);
 
             candidates.Remove(vertex);
             excluded.Add(vertex);
+        }
+    }
+
+    private static HashSet<int> Intersect(HashSet<int> source, HashSet<int> adjacent)
+    {
+        var result = new HashSet<int>();
+        foreach (var value in source)
+        {
+            if (adjacent.Contains(value))
+            {
+                result.Add(value);
+            }
+        }
+
+        return result;
+    }
+
+    private static void Link(Dictionary<int, HashSet<int>> neighbours, int from, int to)
+    {
+        if (!neighbours.TryGetValue(from, out var set))
+        {
+            set = [];
+            neighbours[from] = set;
+        }
+
+        set.Add(to);
+    }
+
+    /// <summary>
+    ///     The mutable state one component's enumeration carries.
+    /// </summary>
+    private sealed class Enumeration
+    {
+        private readonly CliqueBudget _budget;
+        private int _work;
+
+        /// <summary>
+        ///     Gets the maximal cliques found so far.
+        /// </summary>
+        public List<List<int>> Cliques { get; }
+
+        /// <summary>
+        ///     Gets a value indicating whether the budget has been spent.
+        /// </summary>
+        public bool IsExhausted
+        {
+            get
+            {
+                return _work > _budget.MaxWork;
+            }
+        }
+
+        /// <summary>
+        ///     Gets the adjacency map.
+        /// </summary>
+        public Dictionary<int, HashSet<int>> Neighbours { get; }
+
+        /// <summary>
+        ///     Initializes a new instance of the <see cref="Enumeration"/> class.
+        /// </summary>
+        /// <param name="neighbours">The adjacency map.</param>
+        /// <param name="budget">The ceiling on enumeration work.</param>
+        public Enumeration(Dictionary<int, HashSet<int>> neighbours, CliqueBudget budget)
+        {
+            var cliques = new List<List<int>>();
+            Cliques = cliques;
+            Neighbours = neighbours;
+            _budget = budget;
+        }
+
+        /// <summary>
+        ///     Counts one recursive expansion step against the budget.
+        /// </summary>
+        public void RecordStep()
+        {
+            _work++;
         }
     }
 }

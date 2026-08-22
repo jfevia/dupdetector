@@ -28,6 +28,11 @@
 
     <ItemGroup>
         <PackageVersion Include="SonarAnalyzer.CSharp" Version="10.33.0.1635" />
+        <PackageVersion Include="Automaticks.CSharp.Analyzers" Version="2026.8.21" />
+        <PackageVersion Include="Automaticks.Linq.Analyzers" Version="2026.8.21" />
+        <PackageVersion Include="Automaticks.Reflection.Analyzers" Version="2026.8.21" />
+        <PackageVersion Include="Automaticks.Diagnostics.CodeAnalysis.Analyzers" Version="2026.8.21" />
+        <PackageVersion Include="Automaticks.Testing.Analyzers" Version="2026.8.21" />
     </ItemGroup>
 
 </Project>

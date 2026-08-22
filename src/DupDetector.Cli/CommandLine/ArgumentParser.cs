@@ -1,89 +1,111 @@
-﻿using System.Globalization;
-using System.Text;
-using DupDetector.Core.Model;
+﻿using DupDetector.Core.Model;
 using DupDetector.Reporting;
+using System.Globalization;
+using System.Text;
 
 namespace DupDetector.Cli.CommandLine;
 
 /// <summary>
-/// A fully parsed command line, or the reason it could not be parsed.
+///     Parses the command line.
 /// </summary>
-public sealed record CommandLineOptions
-{
-    public required IReadOnlyList<string> InputPaths { get; init; }
-
-    public required DetectionSettings Settings { get; init; }
-
-    public required ReportFormat Format { get; init; }
-
-    public string? OutputPath { get; init; }
-
-    public bool IncludeRawSnippets { get; init; } = true;
-
-    public bool Verbose { get; init; }
-
-    public double? FailOn { get; init; }
-
-    /// <summary>Previous report to compare against, so a run reports change rather than absolute state.</summary>
-    public string? BaselinePath { get; init; }
-
-    /// <summary>Whether a baseline regression should fail the run rather than only be reported.</summary>
-    public bool FailOnNew { get; init; }
-
-    /// <summary>Where to record this run for a later comparison.</summary>
-    public string? WriteBaselinePath { get; init; }
-}
-
-/// <summary>The outcome of parsing, which is either options, a message to print, or an error.</summary>
-public sealed record ParseResult(CommandLineOptions? Options, string? Message, string? Error)
-{
-    public static ParseResult Parsed(CommandLineOptions options) => new(options, null, null);
-
-    public static ParseResult Print(string message) => new(null, message, null);
-
-    public static ParseResult Failed(string error) => new(null, null, error);
-}
-
-/// <summary>
-/// Parses the command line.
-/// </summary>
-// Unknown options and missing values are fatal: a typo must not become a green run with wrong settings.
 public static class ArgumentParser
 {
-    private static readonly DetectionSettings Defaults = DetectionSettings.Default;
+    private static readonly DetectionSettings Defaults;
 
-    /// <summary>Every option, in help order.</summary>
-    public static IReadOnlyList<OptionDefinition> Options { get; } =
-    [
-        new("--detect", OptionArity.SingleValue, "kinds", "Comma-separated kinds: methods, constructors, local-functions, accessors, operators, destructors, types, all", "all"),
-        new("--min-lines", OptionArity.SingleValue, "int", "Smallest block, in lines, that is analysed", Text(Defaults.MinLines)),
-        new("--min-type-lines", OptionArity.SingleValue, "int", "Smallest whole type, in lines, that is analysed", Text(Defaults.MinTypeLines)),
-        new("--similarity", OptionArity.SingleValue, "0-1", "Near-duplicate threshold; 1 disables the near-duplicate pass", Text(Defaults.Similarity)),
-        new("--min-file-spread", OptionArity.SingleValue, "int", "Discard clusters spanning fewer files than this", Text(Defaults.MinFileSpread)),
-        new("--min-project-spread", OptionArity.SingleValue, "int", "Discard clusters spanning fewer projects than this", Text(Defaults.MinProjectSpread)),
-        new("--max-file-spread", OptionArity.SingleValue, "int", "Discard near-duplicate clusters spanning more files than this; 0 for no limit", Text(Defaults.MaxFileSpread)),
-        new("--max-occurrences", OptionArity.SingleValue, "int", "Discard near-duplicate clusters with more copies than this; 0 for no limit", Text(Defaults.MaxOccurrences)),
-        new("--min-prod-lines", OptionArity.SingleValue, "int", "Smallest average size that can be flagged a production duplicate", Text(Defaults.MinProductionDuplicateLines)),
-        new("--exclude", OptionArity.Repeatable, "glob", "Skip matching files before analysis", null),
-        new("--exclude-cluster", OptionArity.Repeatable, "glob", "Suppress clusters whose instances all match", null),
-        new("--exclude-snippet", OptionArity.Repeatable, "text", "Suppress clusters whose source contains this text", null),
-        new("--exclude-project", OptionArity.Repeatable, "text", "Suppress clusters confined to projects matching this text", null),
-        new("--exclude-test-files", OptionArity.None, "", "Exclude test files from the entire run, not merely from the listings", null),
-        new("--format", OptionArity.SingleValue, "yaml|json|html|sarif", "Output format", "yaml"),
-        new("--output", OptionArity.SingleValue, "path", "Write to a file instead of standard output", null),
-        new("--no-raw-snippets", OptionArity.None, "", "Omit verbatim source from the report", null),
-        new("--fail-on", OptionArity.SingleValue, "0-100", "Exit with code 3 when duplication reaches this percentage", null),
-        new("--baseline", OptionArity.SingleValue, "path", "Compare against a previous baseline and report what changed", null),
-        new("--fail-on-new", OptionArity.None, "", "Exit with code 4 when duplication is new or has spread since the baseline", null),
-        new("--write-baseline", OptionArity.SingleValue, "path", "Write a JSON baseline for a later run to compare against", null),
-        new("--verbose", OptionArity.None, "", "Report progress and diagnostics on standard error", null),
-        new("--help", OptionArity.None, "", "Show this help and exit", null),
-        new("--version", OptionArity.None, "", "Show the version and exit", null),
-    ];
+    /// <summary>
+    ///     Every option, in help order.
+    /// </summary>
+    public static IReadOnlyList<OptionDefinition> Options { get; }
 
+    static ArgumentParser()
+    {
+        Defaults = DetectionSettings.Default;
+
+        Options =
+        [
+            OptionDefinitions.Value("--detect", "kinds", "Comma-separated kinds: methods, constructors, local-functions, accessors, operators, destructors, types, all", "all"),
+            OptionDefinitions.Value("--min-lines", "int", "Smallest block, in lines, that is analysed", Text(Defaults.MinLines)),
+            OptionDefinitions.Value("--min-type-lines", "int", "Smallest whole type, in lines, that is analysed", Text(Defaults.MinTypeLines)),
+            OptionDefinitions.Value("--similarity", "0-1", "Near-duplicate threshold; 1 disables the near-duplicate pass", Text(Defaults.Similarity)),
+            OptionDefinitions.Value("--min-file-spread", "int", "Discard clusters spanning fewer files than this", Text(Defaults.MinFileSpread)),
+            OptionDefinitions.Value("--min-project-spread", "int", "Discard clusters spanning fewer projects than this", Text(Defaults.MinProjectSpread)),
+            OptionDefinitions.Value("--max-file-spread", "int", "Discard near-duplicate clusters spanning more files than this; 0 for no limit", Text(Defaults.MaxFileSpread)),
+            OptionDefinitions.Value("--max-occurrences", "int", "Discard near-duplicate clusters with more copies than this; 0 for no limit", Text(Defaults.MaxOccurrences)),
+            OptionDefinitions.Value("--min-prod-lines", "int", "Smallest average size that can be flagged a production duplicate", Text(Defaults.MinProductionDuplicateLines)),
+            OptionDefinitions.Repeatable("--exclude", "glob", "Skip matching files before analysis"),
+            OptionDefinitions.Repeatable("--exclude-cluster", "glob", "Suppress clusters whose instances all match"),
+            OptionDefinitions.Repeatable("--exclude-snippet", "text", "Suppress clusters whose source contains this text"),
+            OptionDefinitions.Repeatable("--exclude-project", "text", "Suppress clusters confined to projects matching this text"),
+            OptionDefinitions.Flag("--exclude-test-files", "Exclude test files from the entire run, not merely from the listings"),
+            OptionDefinitions.Value("--format", "yaml|json|markup|sarif", "Output format", "yaml"),
+            OptionDefinitions.Value("--output", "path", "Write to a file instead of standard output"),
+            OptionDefinitions.Flag("--no-raw-snippets", "Omit verbatim source from the report"),
+            OptionDefinitions.Value("--fail-on", "0-100", "Exit with code 3 when duplication reaches this percentage"),
+            OptionDefinitions.Value("--baseline", "path", "Compare against a previous baseline and report what changed"),
+            OptionDefinitions.Flag("--fail-on-new", "Exit with code 4 when duplication is new or has spread since the baseline"),
+            OptionDefinitions.Value("--write-baseline", "path", "Write a JSON baseline for a later run to compare against"),
+            OptionDefinitions.Flag("--verbose", "Report progress and diagnostics on standard error"),
+            OptionDefinitions.Flag("--help", "Show this help and exit"),
+            OptionDefinitions.Flag("--version", "Show the version and exit"),
+        ];
+    }
+
+    /// <summary>
+    ///     
+    /// </summary>
+    /// <returns></returns>
+    /// <param name="name"></param>
+    public static OptionDefinition? Find(string name)
+    {
+        foreach (var option in Options)
+        {
+            if (string.Equals(option.Name, name, StringComparison.Ordinal))
+            {
+                return option;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    ///     
+    /// </summary>
+    /// <returns></returns>
+    /// <param name="version"></param>
+    public static string HelpText(string version)
+    {
+        var builder = new StringBuilder();
+        builder.AppendLine(CultureInfo.InvariantCulture, $"dupdetector {version}")
+            .AppendLine()
+            .AppendLine("Usage: dupdetector <path> [<path>...] [options]")
+            .AppendLine()
+            .AppendLine("A path may be a directory, a .cs file, a .csproj, a .sln or a .slnx.")
+            .AppendLine()
+            .AppendLine("Options:");
+
+        var width = 0;
+        foreach (var option in Options)
+        {
+            width = Math.Max(width, option.Display.Length);
+        }
+
+        foreach (var option in Options)
+        {
+            builder.AppendLine(CultureInfo.InvariantCulture, $"  {option.Display.PadRight(width)}  {option.HelpText}");
+        }
+
+        return builder.ToString();
+    }
+
+    /// <summary>
+    ///     
+    /// </summary>
+    /// <returns></returns>
+    /// <param name="args"></param>
+    /// <param name="version"></param>
     public static ParseResult Parse(IReadOnlyList<string> args, string version)
     {
-        ArgumentNullException.ThrowIfNull(args);
 
         var paths = new List<string>();
         var values = new Dictionary<string, List<string>>(StringComparer.Ordinal);
@@ -96,14 +118,13 @@ public static class ArgumentParser
 
             if (!argument.StartsWith("--", StringComparison.Ordinal))
             {
-                // Positional paths are accepted anywhere, not only before the first option.
                 paths.Add(argument);
                 continue;
             }
 
             if (Find(argument) is not { } option)
             {
-                return ParseResult.Failed($"Unknown option '{argument}'. Run --help to see the available options.");
+                return ParseResults.Failed($"Unknown option '{argument}'. Run --help to see the available options.");
             }
 
             if (option.Arity == OptionArity.None)
@@ -114,7 +135,7 @@ public static class ArgumentParser
 
             if (cursor >= args.Count)
             {
-                return ParseResult.Failed($"Option '{option.Name}' requires a <{option.ValueName}> value.");
+                return ParseResults.Failed($"Option '{option.Name}' requires a <{option.ValueName}> value.");
             }
 
             Add(values, option.Name, args[cursor]);
@@ -123,44 +144,21 @@ public static class ArgumentParser
 
         if (values.ContainsKey("--help"))
         {
-            return ParseResult.Print(HelpText(version));
+            return ParseResults.Print(HelpText(version));
         }
 
         if (values.ContainsKey("--version"))
         {
-            return ParseResult.Print(version);
+            return ParseResults.Print(version);
         }
 
         if (paths.Count == 0)
         {
-            return ParseResult.Failed($"At least one path is required.{Environment.NewLine}{Environment.NewLine}{HelpText(version)}");
+            return ParseResults.Failed($"At least one path is required.{Environment.NewLine}{Environment.NewLine}{HelpText(version)}");
         }
 
         return Build(paths, values);
     }
-
-    public static string HelpText(string version)
-    {
-        var builder = new StringBuilder()
-            .AppendLine(CultureInfo.InvariantCulture, $"dupdetector {version}")
-            .AppendLine()
-            .AppendLine("Usage: dupdetector <path> [<path>...] [options]")
-            .AppendLine()
-            .AppendLine("A path may be a directory, a .cs file, a .csproj, a .sln or a .slnx.")
-            .AppendLine()
-            .AppendLine("Options:");
-
-        var width = Options.Max(option => option.Display.Length);
-        foreach (var option in Options)
-        {
-            builder.AppendLine(CultureInfo.InvariantCulture, $"  {option.Display.PadRight(width)}  {option.HelpText}");
-        }
-
-        return builder.ToString();
-    }
-
-    internal static OptionDefinition? Find(string name) =>
-        Options.FirstOrDefault(option => string.Equals(option.Name, name, StringComparison.Ordinal));
 
     private static void Add(Dictionary<string, List<string>> values, string name, string value)
     {
@@ -173,70 +171,112 @@ public static class ArgumentParser
         existing.Add(value);
     }
 
+    private static List<string> All(Dictionary<string, List<string>> values, string name)
+    {
+        return values.TryGetValue(name, out var found) ? found : [];
+    }
+
     private static ParseResult Build(List<string> paths, Dictionary<string, List<string>> values)
     {
         try
         {
-            if (!ReportFormats.TryParse(Single(values, "--format") ?? "yaml", out var format))
+            if (!ReportFormats.CanTryParse(Single(values, "--format") ?? "yaml", out var format))
             {
-                return ParseResult.Failed(
+                return ParseResults.Failed(
                     $"Unknown format '{Single(values, "--format")}'. Valid formats: {string.Join(", ", ReportFormats.Names)}.");
             }
 
             if (ParseKinds(Single(values, "--detect")) is not { } kinds)
             {
-                return ParseResult.Failed(
+                return ParseResults.Failed(
                     "Unknown detection kind. Valid kinds: methods, constructors, local-functions, accessors, operators, destructors, all.");
             }
 
-            var settings = new DetectionSettings
-            {
-                Kinds = kinds,
-                MinLines = Integer(values, "--min-lines", Defaults.MinLines),
-                MinTypeLines = Integer(values, "--min-type-lines", Defaults.MinTypeLines),
-                Similarity = Number(values, "--similarity", Defaults.Similarity),
-                MinFileSpread = Integer(values, "--min-file-spread", Defaults.MinFileSpread),
-                MinProjectSpread = Integer(values, "--min-project-spread", Defaults.MinProjectSpread),
-                MaxFileSpread = Integer(values, "--max-file-spread", Defaults.MaxFileSpread),
-                MaxOccurrences = Integer(values, "--max-occurrences", Defaults.MaxOccurrences),
-                MinProductionDuplicateLines = Integer(values, "--min-prod-lines", Defaults.MinProductionDuplicateLines),
-                ExcludeTestFiles = values.ContainsKey("--exclude-test-files"),
-                ExcludeFileGlobs = All(values, "--exclude"),
-                ExcludeClusterFileGlobs = All(values, "--exclude-cluster"),
-                ExcludeSnippetPatterns = All(values, "--exclude-snippet"),
-                ExcludeProjectPatterns = All(values, "--exclude-project"),
-            };
-
-            double? failOn = null;
-            if (values.ContainsKey("--fail-on"))
-            {
-                var threshold = Number(values, "--fail-on", 0.0);
-                if (threshold is < 0 or > 100)
-                {
-                    throw new FormatException("Option '--fail-on' must be between 0 and 100.");
-                }
-
-                failOn = threshold;
-            }
-
-            return ParseResult.Parsed(new CommandLineOptions
+            var commandLineOptions = new CommandLineOptions
             {
                 InputPaths = paths,
-                Settings = settings,
+                Settings = BuildSettings(values, kinds),
                 Format = format,
                 OutputPath = Single(values, "--output"),
-                IncludeRawSnippets = !values.ContainsKey("--no-raw-snippets"),
-                Verbose = values.ContainsKey("--verbose"),
-                FailOn = failOn,
+                IsIncludeRawSnippets = !values.ContainsKey("--no-raw-snippets"),
+                IsVerbose = values.ContainsKey("--verbose"),
+                FailOn = BuildFailOn(values),
                 BaselinePath = Single(values, "--baseline"),
-                FailOnNew = values.ContainsKey("--fail-on-new"),
+                IsFailOnNew = values.ContainsKey("--fail-on-new"),
                 WriteBaselinePath = Single(values, "--write-baseline"),
-            });
+            };
+            return ParseResults.Parsed(commandLineOptions);
         }
         catch (Exception exception) when (exception is FormatException or ArgumentOutOfRangeException)
         {
-            return ParseResult.Failed(exception.Message);
+            return ParseResults.Failed(exception.Message);
         }
+    }
+
+    private static double? BuildFailOn(Dictionary<string, List<string>> values)
+    {
+        if (!values.ContainsKey("--fail-on"))
+        {
+            return null;
+        }
+
+        var threshold = Number(values, "--fail-on", 0.0);
+        if (threshold is < 0 or > 100)
+        {
+            var formatException = new FormatException("Option '--fail-on' must be between 0 and 100.");
+            throw formatException;
+        }
+
+        return threshold;
+    }
+
+    private static DetectionSettings BuildSettings(Dictionary<string, List<string>> values, DetectionKind kinds)
+    {
+        var settings = new DetectionSettings
+        {
+            Kinds = kinds,
+            MinLines = Integer(values, "--min-lines", Defaults.MinLines),
+            MinTypeLines = Integer(values, "--min-type-lines", Defaults.MinTypeLines),
+            Similarity = Number(values, "--similarity", Defaults.Similarity),
+            MinFileSpread = Integer(values, "--min-file-spread", Defaults.MinFileSpread),
+            MinProjectSpread = Integer(values, "--min-project-spread", Defaults.MinProjectSpread),
+            MaxFileSpread = Integer(values, "--max-file-spread", Defaults.MaxFileSpread),
+            MaxOccurrences = Integer(values, "--max-occurrences", Defaults.MaxOccurrences),
+            MinProductionDuplicateLines = Integer(values, "--min-prod-lines", Defaults.MinProductionDuplicateLines),
+            IsExcludeTestFiles = values.ContainsKey("--exclude-test-files"),
+            ExcludeFileGlobs = All(values, "--exclude"),
+            ExcludeClusterFileGlobs = All(values, "--exclude-cluster"),
+            ExcludeSnippetPatterns = All(values, "--exclude-snippet"),
+            ExcludeProjectPatterns = All(values, "--exclude-project"),
+        };
+
+        return settings;
+    }
+
+    private static int Integer(Dictionary<string, List<string>> values, string name, int fallback)
+    {
+        if (Single(values, name) is not { } raw)
+        {
+            return fallback;
+        }
+
+        var formatException2 = new FormatException($"Option '{name}' expects a whole number but received '{raw}'.");
+        return int.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed)
+            ? parsed
+            : throw formatException2;
+    }
+
+    private static double Number(Dictionary<string, List<string>> values, string name, double fallback)
+    {
+        if (Single(values, name) is not { } raw)
+        {
+            return fallback;
+        }
+
+        var formatException3 = new FormatException($"Option '{name}' expects a number but received '{raw}'.");
+        return double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out var parsed)
+            ? parsed
+            : throw formatException3;
     }
 
     private static DetectionKind? ParseKinds(string? value)
@@ -273,37 +313,18 @@ public static class ArgumentParser
         return kinds == DetectionKind.None ? DetectionKind.All : kinds;
     }
 
-    private static string? Single(Dictionary<string, List<string>> values, string name) =>
-        values.TryGetValue(name, out var found) ? found[^1] : null;
-
-    private static List<string> All(Dictionary<string, List<string>> values, string name) =>
-        values.TryGetValue(name, out var found) ? found : [];
-
-    private static int Integer(Dictionary<string, List<string>> values, string name, int fallback)
+    private static string? Single(Dictionary<string, List<string>> values, string name)
     {
-        if (Single(values, name) is not { } raw)
-        {
-            return fallback;
-        }
-
-        return int.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed)
-            ? parsed
-            : throw new FormatException($"Option '{name}' expects a whole number but received '{raw}'.");
+        return values.TryGetValue(name, out var found) ? found[^1] : null;
     }
 
-    private static double Number(Dictionary<string, List<string>> values, string name, double fallback)
+    private static string Text(int value)
     {
-        if (Single(values, name) is not { } raw)
-        {
-            return fallback;
-        }
-
-        return double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out var parsed)
-            ? parsed
-            : throw new FormatException($"Option '{name}' expects a number but received '{raw}'.");
+        return value.ToString(CultureInfo.InvariantCulture);
     }
 
-    private static string Text(int value) => value.ToString(CultureInfo.InvariantCulture);
-
-    private static string Text(double value) => value.ToString("0.##", CultureInfo.InvariantCulture);
+    private static string Text(double value)
+    {
+        return value.ToString("0.##", CultureInfo.InvariantCulture);
+    }
 }

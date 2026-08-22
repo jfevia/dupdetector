@@ -1,13 +1,28 @@
 ﻿namespace DupDetector.Core.Detection;
 
 /// <summary>
-/// Union-find with path halving and union by rank. Iterative, so no input size can exhaust the stack.
+///     Union-find with path halving and union by rank. Iterative, so no input size can exhaust the stack.
 /// </summary>
 public sealed class DisjointSet
 {
     private readonly int[] _parent;
     private readonly int[] _rank;
 
+    /// <summary>
+    ///     
+    /// </summary>
+    public int Count
+    {
+        get
+        {
+            return _parent.Length;
+        }
+    }
+
+    /// <summary>
+    ///     
+    /// </summary>
+    /// <param name="count"></param>
     public DisjointSet(int count)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(count);
@@ -20,21 +35,13 @@ public sealed class DisjointSet
         }
     }
 
-    public int Count => _parent.Length;
-
-    public int Find(int element)
-    {
-        while (_parent[element] != element)
-        {
-            _parent[element] = _parent[_parent[element]];
-            element = _parent[element];
-        }
-
-        return element;
-    }
-
-    /// <summary>Merges two sets. Returns <c>false</c> when they were already joined.</summary>
-    public bool Union(int left, int right)
+    /// <summary>
+    ///     Merges two sets. Returns <c>false</c> when they were already joined.
+    /// </summary>
+    /// <returns></returns>
+    /// <param name="left"></param>
+    /// <param name="right"></param>
+    public bool CanUnion(int left, int right)
     {
         var rootLeft = Find(left);
         var rootRight = Find(right);
@@ -58,7 +65,26 @@ public sealed class DisjointSet
         return true;
     }
 
-    /// <summary>Groups element indices by their representative, each group in ascending order.</summary>
+    /// <summary>
+    ///     
+    /// </summary>
+    /// <returns></returns>
+    /// <param name="element"></param>
+    public int Find(int element)
+    {
+        while (_parent[element] != element)
+        {
+            _parent[element] = _parent[_parent[element]];
+            element = _parent[element];
+        }
+
+        return element;
+    }
+
+    /// <summary>
+    ///     Groups element indices by their representative, each group in ascending order.
+    /// </summary>
+    /// <returns></returns>
     public IReadOnlyList<List<int>> Groups()
     {
         var groups = new Dictionary<int, List<int>>();

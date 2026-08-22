@@ -1,0 +1,68 @@
+﻿namespace DupDetector.Reporting;
+
+/// <summary>
+///     The stylesheet embedded into the report.
+/// </summary>
+public static class ReportStyle
+{
+
+    private const string Content = """
+:root { color-scheme: dark; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: system-ui, sans-serif; background: #0f172a; color: #e2e8f0; line-height: 1.5; }
+header { display: flex; align-items: center; gap: 1rem; padding: 1.25rem 2rem; background: #1e293b; border-bottom: 1px solid #334155; }
+h1 { font-size: 1.25rem; }
+h2 { font-size: 1rem; text-transform: uppercase; letter-spacing: .05em; color: #94a3b8; margin-bottom: .75rem; }
+main { max-width: 1200px; margin: 0 auto; padding: 2rem; }
+section { margin-bottom: 2rem; }
+.badge { padding: .15rem .6rem; border-radius: .375rem; font-size: .75rem; font-weight: 600; background: #334155; }
+.badge.low { background: #14532d; color: #86efac; }
+.badge.medium { background: #713f12; color: #fde68a; }
+.badge.high { background: #7c2d12; color: #fed7aa; }
+.badge.critical { background: #7f1d1d; color: #fecaca; }
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; }
+.card { background: #1e293b; border: 1px solid #334155; border-radius: .75rem; padding: 1rem; display: flex; flex-direction: column; }
+.card .label { font-size: .7rem; text-transform: uppercase; letter-spacing: .05em; color: #94a3b8; }
+.card .note { font-size: .72rem; color: #94a3b8; margin-top: .25rem; }
+.meta { font-size: .75rem; color: #94a3b8; margin-left: auto; }
+.scope { list-style: disc; padding-left: 1.25rem; font-size: .85rem; color: #cbd5e1; }
+.scope li { margin-bottom: .25rem; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+details { margin-top: .35rem; }
+summary { cursor: pointer; color: #93c5fd; font-size: .75rem; }
+pre { margin-top: .35rem; padding: .5rem; background: #0f172a; border: 1px solid #334155; border-radius: .375rem; overflow-x: auto; font-size: .75rem; white-space: pre-wrap; }
+.card .value { font-size: 1.6rem; font-weight: 700; }
+.bar { display: flex; align-items: center; gap: .75rem; margin-bottom: .4rem; font-size: .8rem; }
+.bar .name { flex: 0 0 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: monospace; color: #cbd5e1; }
+.bar .track { flex: 1; height: 8px; background: #1e293b; border: 1px solid #334155; border-radius: 9999px; overflow: hidden; }
+.bar .fill { height: 100%; background: #38bdf8; }
+.bar .pct { flex: 0 0 3.5rem; text-align: right; color: #94a3b8; }
+table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+th { text-align: left; padding: 0; background: #1e293b; color: #94a3b8; font-size: .7rem; text-transform: uppercase; }
+th, th button { padding: .5rem .6rem; }
+th button { width: 100%; text-align: left; background: none; border: 0; color: inherit; font: inherit; text-transform: inherit; cursor: pointer; }
+th button:hover { color: #e2e8f0; }
+:focus-visible { outline: 2px solid #38bdf8; outline-offset: -2px; }
+th[aria-sort=ascending] button::after { content: " \25b2"; }
+th[aria-sort=descending] button::after { content: " \25bc"; }
+td { padding: .5rem .6rem; border-bottom: 1px solid #1e293b; vertical-align: top; }
+tr:hover td { background: #1e293b66; }
+.mono { font-family: monospace; color: #93c5fd; }
+.tag { display: inline-block; padding: .05rem .4rem; border-radius: .25rem; font-size: .7rem; background: #1e3a5f; color: #93c5fd; margin-right: .25rem; }
+.tag.exact { background: #14532d; color: #86efac; }
+.tag.prod { background: #4c1d95; color: #ddd6fe; }
+.tag.partial { background: #7c2d12; color: #fed7aa; }
+input[type=search] { width: 100%; margin-bottom: .75rem; padding: .5rem .75rem; background: #1e293b; border: 1px solid #334155; border-radius: .5rem; color: inherit; }
+""";
+
+    /// <summary>
+    ///     Gets the asset text.
+    /// </summary>
+    public static string Text
+    {
+        get
+        {
+            return Content;
+        }
+    }
+}

@@ -34,4 +34,20 @@
         <InternalsVisibleTo Include="DupDetector.Cli.Tests" />
     </ItemGroup>
 
+    <!-- Stamps the version as a constant so the tool never reads it back through reflection. -->
+    <Target Name="GenerateToolVersion" BeforeTargets="BeforeCompile">
+        <PropertyGroup>
+            <ToolVersionFile>$(IntermediateOutputPath)ToolVersion.g.cs</ToolVersionFile>
+        </PropertyGroup>
+        <WriteLinesToFile
+            File="$(ToolVersionFile)"
+            Lines="namespace DupDetector.Cli%3B;;internal static class ToolVersion;{;    internal const string Value = &quot;$(Version)&quot;%3B;}"
+            Overwrite="true"
+            WriteOnlyWhenDifferent="true" />
+        <ItemGroup>
+            <Compile Include="$(ToolVersionFile)" />
+            <FileWrites Include="$(ToolVersionFile)" />
+        </ItemGroup>
+    </Target>
+
 </Project>

@@ -2,24 +2,19 @@
 
 namespace DupDetector.Core.Detection;
 
-/// <summary>A pair of block indices found to meet the similarity threshold.</summary>
-public readonly record struct SimilarPair(int Left, int Right, double Similarity);
-
 /// <summary>
-/// Finds every pair of blocks whose multiset Jaccard similarity meets a threshold.
+///     Finds every pair of blocks whose multiset Jaccard similarity meets a threshold.
 /// </summary>
-// Candidates come from an inverted token index, pruned by shared tokens and by size ratio.
-// Both pruning rules are exact, so the result equals an all-pairs comparison.
 public static class SimilarityJoin
 {
     /// <summary>
-    /// Returns all qualifying pairs, ordered by <see cref="SimilarPair.Left"/> then
-    /// <see cref="SimilarPair.Right"/> so results never depend on scheduling.
+    ///     Returns all qualifying pairs in a deterministic order.
     /// </summary>
+    /// <param name="blocks">The token multisets to compare.</param>
+    /// <param name="threshold">The similarity a pair must reach.</param>
+    /// <returns>The qualifying pairs, ordered by left index then right index.</returns>
     public static IReadOnlyList<SimilarPair> FindPairs(IReadOnlyList<TokenMultiset> blocks, double threshold)
     {
-        ArgumentNullException.ThrowIfNull(blocks);
-
         if (blocks.Count < 2)
         {
             return [];
@@ -27,11 +22,12 @@ public static class SimilarityJoin
 
         var index = BuildIndex(blocks);
         var found = new ConcurrentBag<SimilarPair>();
+        var probe = new Probe(blocks, index, threshold, found);
 
-        Parallel.For(0, blocks.Count, left => Probe(blocks, index, left, threshold, found));
+        Parallel.For(0, blocks.Count, probe.Run);
 
         var pairs = found.ToArray();
-        Array.Sort(pairs, static (a, b) => a.Left == b.Left ? a.Right.CompareTo(b.Right) : a.Left.CompareTo(b.Left));
+        Array.Sort(pairs, ComparePairs);
         return pairs;
     }
 
@@ -55,34 +51,71 @@ public static class SimilarityJoin
         return index;
     }
 
-    private static void Probe(
-        IReadOnlyList<TokenMultiset> blocks,
-        Dictionary<int, List<int>> index,
-        int left,
-        double threshold,
-        ConcurrentBag<SimilarPair> found)
+    private static int ComparePairs(SimilarPair first, SimilarPair second)
     {
-        var source = blocks[left];
-        var candidates = new HashSet<int>();
+        return first.Left == second.Left
+            ? first.Right.CompareTo(second.Right)
+            : first.Left.CompareTo(second.Left);
+    }
 
-        foreach (var token in source.Ids)
+    /// <summary>
+    ///     Compares one block against every candidate that shares a token with it.
+    /// </summary>
+    private sealed class Probe
+    {
+        private readonly IReadOnlyList<TokenMultiset> _blocks;
+        private readonly ConcurrentBag<SimilarPair> _found;
+        private readonly Dictionary<int, List<int>> _index;
+        private readonly double _threshold;
+
+        /// <summary>
+        ///     Initializes a new instance of the <see cref="Probe"/> class.
+        /// </summary>
+        /// <param name="blocks">The token multisets to compare.</param>
+        /// <param name="index">The inverted token index.</param>
+        /// <param name="threshold">The similarity a pair must reach.</param>
+        /// <param name="found">The bag qualifying pairs are added to.</param>
+        public Probe(
+            IReadOnlyList<TokenMultiset> blocks,
+            Dictionary<int, List<int>> index,
+            double threshold,
+            ConcurrentBag<SimilarPair> found)
         {
-            foreach (var candidate in index[token])
-            {
-                // Each unordered pair is examined once, from its lower index.
-                if (candidate > left && Similarity.UpperBound(source.Cardinality, blocks[candidate].Cardinality) >= threshold)
-                {
-                    candidates.Add(candidate);
-                }
-            }
+            _blocks = blocks;
+            _index = index;
+            _threshold = threshold;
+            _found = found;
         }
 
-        foreach (var candidate in candidates)
+        /// <summary>
+        ///     Compares the block at <paramref name="left"/> against every later candidate.
+        /// </summary>
+        /// <param name="left">The index of the block to probe.</param>
+        public void Run(int left)
         {
-            var similarity = Similarity.Jaccard(source, blocks[candidate]);
-            if (similarity >= threshold)
+            var source = _blocks[left];
+            var candidates = new HashSet<int>();
+
+            foreach (var token in source.Ids)
             {
-                found.Add(new SimilarPair(left, candidate, similarity));
+                foreach (var candidate in _index[token])
+                {
+                    if (candidate > left &&
+                        Similarity.UpperBound(source.Cardinality, _blocks[candidate].Cardinality) >= _threshold)
+                    {
+                        candidates.Add(candidate);
+                    }
+                }
+            }
+
+            foreach (var candidate in candidates)
+            {
+                var similarity = Similarity.Jaccard(source, _blocks[candidate]);
+                if (similarity >= _threshold)
+                {
+                    var pair = new SimilarPair(left, candidate, similarity);
+                    _found.Add(pair);
+                }
             }
         }
     }

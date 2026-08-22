@@ -1,0 +1,9 @@
+﻿<Project>
+
+    <!-- Imported after the project body, which is where IsTestProject is set. Referencing the test
+         analyzer from Directory.Build.props instead would evaluate the condition too early. -->
+    <ItemGroup Condition="'$(IsTestProject)' == 'true'">
+        <PackageReference Include="Automaticks.Testing.Analyzers" PrivateAssets="all" />
+    </ItemGroup>
+
+</Project>

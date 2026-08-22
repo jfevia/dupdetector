@@ -3,21 +3,41 @@
 namespace DupDetector.Cli;
 
 /// <summary>
-/// Writes the report to standard output and everything else to standard error, so a report can be
-/// piped without diagnostics contaminating it.
+///     Writes the report to standard output and everything else to standard error, so a report can be
+///     piped without diagnostics contaminating it.
 /// </summary>
-internal sealed class ConsoleOutputSink : IOutputSink
+public sealed class ConsoleOutputSink : IOutputSink
 {
-    public void WriteReport(string content) => Console.Out.Write(content);
 
-    public void WriteMessage(string message) => Console.Out.Write(message);
-
+    /// <summary>
+    ///     
+    /// </summary>
+    /// <param name="path"></param>
+    /// <param name="content"></param>
     public void Save(string path, string content)
     {
         var full = Path.GetFullPath(path);
 
-        // A resolved file path always has a parent directory; creating it is a no-op when it exists.
         Directory.CreateDirectory(Path.GetDirectoryName(full)!);
-        File.WriteAllText(full, content, new UTF8Encoding(false));
+        var encoding = new UTF8Encoding(false);
+        File.WriteAllText(full, content, encoding);
+    }
+
+    /// <summary>
+    ///     
+    /// </summary>
+    /// <param name="message"></param>
+    public void WriteMessage(string message)
+    {
+        Console.Out.Write(message);
+    }
+
+    /// <summary>
+    ///     
+    /// </summary>
+    /// <param name="content"></param>
+    public void WriteReport(string content)
+    {
+        Console.Out.Write(content);
     }
 }

@@ -1,23 +1,24 @@
-﻿using System.Text.Json;
-using DupDetector.Core.Model;
-using DupDetector.Core.Pipeline;
+﻿using DupDetector.Core.Model;
 using DupDetector.Core.Scoring;
 using DupDetector.Reporting;
+using DupDetector.Reporting.Documents;
+using DupDetector.Reporting.Sarif;
+
 using DupDetector.TestKit;
+
+using System.Text.Json;
+
 using Xunit;
 
 namespace DupDetector.Cli.Tests;
 
 /// <summary>
-/// One test per defect confirmed while auditing the duplication report the tool produced.
+///     One test per defect confirmed while auditing the duplication report the tool produced.
 /// </summary>
-// Each test names the behaviour that was wrong, so a regression is recognised rather than rediscovered.
-// See docs/disproven-findings.md for claims that were refuted and must not be "fixed".
 public class ReportAuditRegressionTests
 {
     /// <summary>
-    /// The shape that was reported as zero: three members of four lines each, so every member falls
-    /// below MinLines while the enclosing type is duplicated verbatim.
+    ///     Three members of four lines each: every member is below MinLines, the type is not.
     /// </summary>
     private const string SmallMemberedClass = """
         internal sealed class SettableTimeProvider
@@ -36,33 +37,156 @@ public class ReportAuditRegressionTests
         }
         """;
 
-    private static DetectionReport Analyse(DetectionSettings settings, params string[] sources)
+    /// <summary>
+    ///     
+    /// </summary>
+    [Fact]
+    public void BaselineReportsGrownClusterAsGrownRatherThanNew()
     {
-        var units = sources
-            .Select((source, index) => Code.Unit(source, $"/repo/P{index}/File{index}.cs", $"Proj{index}"))
-            .ToArray();
+        var settings = new DetectionSettings
+        {
+            MinLines = 5,
+            MinTypeLines = 8
+        };
+        var before = Analyses.Run(settings, [SmallMemberedClass, SmallMemberedClass]);
+        var after = Analyses.Run(settings, [SmallMemberedClass, SmallMemberedClass, SmallMemberedClass]);
 
-        return AnalysisPipeline.Run(units, settings, DiscoveryStats.Empty).Report;
+        var clock = new FixedTimeProvider();
+        var delta = BaselineDeltas.Between(Baselines.From(before, clock), after);
+
+        Assert.Empty(delta.Added);
+        Assert.Single(delta.Grown);
+        Assert.True(delta.IsRegression);
     }
 
-    // Previously: reported ZERO. Every member was below MinLines and no type was ever a candidate.
+    /// <summary>
+    ///     
+    /// </summary>
+    [Fact]
+    public void BaselineReportsResolvedClustersAndSurvivesRoundTrip()
+    {
+        var settings = new DetectionSettings
+        {
+            MinLines = 5,
+            MinTypeLines = 8
+        };
+        var clock = new FixedTimeProvider();
+        var before = Baselines.From(Analyses.Run(settings, [SmallMemberedClass, SmallMemberedClass]), clock);
+        var after = Analyses.Run(settings, [SmallMemberedClass]);
+
+        var delta = BaselineDeltas.Between(Baselines.Parse(before.ToJson()), after);
+
+        Assert.Single(delta.Removed);
+        Assert.Empty(delta.Added);
+        Assert.False(delta.IsRegression);
+    }
+
+    /// <summary>
+    ///     
+    /// </summary>
+    [Fact]
+    public void BlockBodiedPropertyIsNotCountedAsBothPropertyAndAccessors()
+    {
+        const string source = """
+            class Holder
+            {
+                public int Total
+                {
+                    get
+                    {
+                        var a = 1;
+                        var b = 2;
+                        return a + b;
+                    }
+                }
+            }
+            """;
+
+        var detectionSettings = new DetectionSettings
+        {
+            MinLines = 5,
+            Kinds = DetectionKind.Accessors
+        };
+        var names = Code.MemberNames(Code.Blocks(source, detectionSettings));
+
+        Assert.Equal(["Total.get"], names);
+    }
+
+    /// <summary>
+    ///     
+    /// </summary>
     [Fact]
     public void DuplicatedClassIsDetectedEvenWhenEveryMemberIsBelowMinLines()
     {
-        var report = Analyse(
-            new DetectionSettings { MinLines = 5, MinTypeLines = 8 },
+        var detectionSettings2 = new DetectionSettings
+        {
+            MinLines = 5,
+            MinTypeLines = 8
+        };
+        var report = Analyses.Run(detectionSettings2, [SmallMemberedClass,
             SmallMemberedClass,
-            SmallMemberedClass,
-            SmallMemberedClass);
+            SmallMemberedClass]);
 
         var cluster = Assert.Single(report.Clusters);
         Assert.Equal(3, cluster.Metrics.Occurrences);
         Assert.StartsWith("class SettableTimeProvider", cluster.Instances[0].MemberName, StringComparison.Ordinal);
     }
 
-    // Previously: a member and its enclosing type were both reported, describing the same code twice.
+    /// <summary>
+    ///     
+    /// </summary>
     [Fact]
-    public void MemberClusterContainedInATypeClusterIsNotAlsoReported()
+    public void EmittedClusterScoreIsPresentAndDistinctFromRemovableLines()
+    {
+        var detectionSettings3 = new DetectionSettings
+        {
+            MinLines = 5,
+            MinTypeLines = 8
+        };
+        var report = Analyses.Run(detectionSettings3, [SmallMemberedClass,
+            SmallMemberedClass,
+            SmallMemberedClass]);
+
+        var document = ReportDocuments.From(report, includeRawSnippets: false);
+        var cluster = Assert.Single(document.Clusters);
+
+        Assert.Equal(ClusterScore.For(report.Clusters[0].Metrics), cluster.Score);
+        Assert.InRange(cluster.Score, 0.0, 100.0);
+        Assert.NotEqual(cluster.RemovableLines, cluster.Score);
+    }
+
+    /// <summary>
+    ///     
+    /// </summary>
+    [Fact]
+    public void ExpressionBodiedPropertyIsExtractedWhenLargeEnough()
+    {
+        const string source = """
+            class Holder
+            {
+                public int Total =>
+                    1 +
+                    2 +
+                    3 +
+                    4;
+            }
+            """;
+
+        var detectionSettings4 = new DetectionSettings
+        {
+            MinLines = 5,
+            Kinds = DetectionKind.Accessors
+        };
+        var blocks = Code.Blocks(source, detectionSettings4);
+
+        Assert.Equal("Total", Assert.Single(blocks).MemberName);
+    }
+
+    /// <summary>
+    ///     
+    /// </summary>
+    [Fact]
+    public void MemberClusterContainedInTypeClusterIsNotAlsoReported()
     {
         const string source = """
             internal sealed class Helper
@@ -78,8 +202,18 @@ public class ReportAuditRegressionTests
             }
             """;
 
-        var withTypes = Analyse(new DetectionSettings { MinLines = 5, MinTypeLines = 8 }, source, source);
-        var membersOnly = Analyse(new DetectionSettings { MinLines = 5, Kinds = DetectionKind.Members }, source, source);
+        var detectionSettings5 = new DetectionSettings
+        {
+            MinLines = 5,
+            MinTypeLines = 8
+        };
+        var withTypes = Analyses.Run(detectionSettings5, [source, source]);
+        var detectionSettings6 = new DetectionSettings
+        {
+            MinLines = 5,
+            Kinds = DetectionKind.Members
+        };
+        var membersOnly = Analyses.Run(detectionSettings6, [source, source]);
 
         Assert.Single(withTypes.Clusters);
         Assert.StartsWith("class Helper", withTypes.Clusters[0].Instances[0].MemberName, StringComparison.Ordinal);
@@ -87,69 +221,9 @@ public class ReportAuditRegressionTests
         Assert.Equal(1, withTypes.Scope!.Suppressed.ContainedInLargerCluster);
     }
 
-    // Previously: ClusterScore.For had no production call site, so the HTML fell back to
-    // removableLines and the Score and Removable columns were always identical.
-    [Fact]
-    public void EmittedClusterScoreIsPresentAndDistinctFromRemovableLines()
-    {
-        var report = Analyse(
-            new DetectionSettings { MinLines = 5, MinTypeLines = 8 },
-            SmallMemberedClass,
-            SmallMemberedClass,
-            SmallMemberedClass);
-
-        var document = ReportDocument.From(report, includeRawSnippets: false);
-        var cluster = Assert.Single(document.Clusters);
-
-        Assert.Equal(ClusterScore.For(report.Clusters[0].Metrics), cluster.Score);
-        Assert.InRange(cluster.Score, 0.0, 100.0);
-        Assert.NotEqual(cluster.RemovableLines, cluster.Score);
-    }
-
-    // Previously: no output field recorded which thresholds had been applied, so a low percentage
-    // produced by restrictive filters read as a clean bill of health.
-    [Fact]
-    public void ReportDisclosesActiveThresholdsAndWhatTheyWithheld()
-    {
-        var report = Analyse(
-            new DetectionSettings { MinLines = 5, MinTypeLines = 8, MinFileSpread = 99 },
-            SmallMemberedClass,
-            SmallMemberedClass);
-
-        var scope = ReportDocument.From(report, includeRawSnippets: false).Scope;
-
-        Assert.NotNull(scope);
-        Assert.Equal(99, scope.MinFileSpread);
-        Assert.Equal(8, scope.MinTypeLines);
-        Assert.Equal(1, scope.Suppressed.BelowFileSpread);
-        Assert.Contains(scope.Limitations, note => note.Contains("fewer than 99 files", StringComparison.Ordinal));
-    }
-
-    // Previously: a stored report carried no version, timestamp or command, so it could not be
-    // reproduced or attributed.
-    [Fact]
-    public void ReportCarriesProvenance()
-    {
-        var metadata = new MetadataDocument
-        {
-            ToolVersion = "9.9.9",
-            GeneratedAtUtc = "2024-01-01T00:00:00.0000000Z",
-            TargetPath = "/repo",
-            CommandLine = "/repo --format json",
-        };
-
-        var document = ReportDocument.From(
-            Analyse(DetectionSettings.Default, SmallMemberedClass),
-            includeRawSnippets: false,
-            metadata);
-
-        Assert.Equal("1.0", document.Metadata!.SchemaVersion);
-        Assert.Equal("9.9.9", document.Metadata.ToolVersion);
-        Assert.Equal("/repo --format json", document.Metadata.CommandLine);
-    }
-
-    // Previously: only a physical-line percentage was emitted, so blanks, comments and using
-    // directives inflated the denominator and understated duplication.
+    /// <summary>
+    ///     
+    /// </summary>
     [Fact]
     public void NclocPercentageIsEmittedAlongsideThePhysicalOne()
     {
@@ -170,103 +244,90 @@ public class ReportAuditRegressionTests
             }
             """;
 
-        var report = Analyse(new DetectionSettings { MinLines = 5, MinTypeLines = 8 }, padded, padded);
+        var detectionSettings7 = new DetectionSettings
+        {
+            MinLines = 5,
+            MinTypeLines = 8
+        };
+        var report = Analyses.Run(detectionSettings7, [padded, padded]);
 
         Assert.True(report.Summary.TotalCodeLines < report.Summary.TotalLines);
         Assert.True(report.Summary.CodeDuplicationPercentage > report.Summary.DuplicationPercentage);
-        Assert.Equal(
-            report.Summary.TotalDuplicateCodeLines,
-            report.FileScores.Sum(score => score.DuplicateCodeLines));
+
+        var duplicateCodeLines = 0;
+        foreach (var score in report.FileScores)
+        {
+            duplicateCodeLines += score.DuplicateCodeLines;
+        }
+
+        Assert.Equal(report.Summary.TotalDuplicateCodeLines, duplicateCodeLines);
     }
 
-    // Previously: an expression-bodied property was never a candidate, while its block-bodied
-    // equivalent was, so semantics depended on syntax.
+    /// <summary>
+    ///     
+    /// </summary>
     [Fact]
-    public void ExpressionBodiedPropertyIsExtractedWhenLargeEnough()
+    public void ReportCarriesProvenance()
     {
-        const string source = """
-            class Holder
-            {
-                public int Total =>
-                    1 +
-                    2 +
-                    3 +
-                    4;
-            }
-            """;
+        var metadata = new MetadataDocument
+        {
+            ToolVersion = "9.9.9",
+            GeneratedAtUtc = "2024-01-01T00:00:00.0000000Z",
+            TargetPath = "/repo",
+            CommandLine = "/repo --format json",
+        };
 
-        var blocks = Code.Blocks(source, new DetectionSettings { MinLines = 5, Kinds = DetectionKind.Accessors });
+        var document = ReportDocuments.From(
+            Analyses.Run(DetectionSettings.Default, [SmallMemberedClass]),
+            includeRawSnippets: false,
+            metadata);
 
-        Assert.Equal("Total", Assert.Single(blocks).MemberName);
+        Assert.Equal("1.0", document.Metadata!.SchemaVersion);
+        Assert.Equal("9.9.9", document.Metadata.ToolVersion);
+        Assert.Equal("/repo --format json", document.Metadata.CommandLine);
     }
 
-    // Previously: a block-bodied property would be counted once as the property and again as each
-    // accessor, so the same lines were reported twice.
+    /// <summary>
+    ///     
+    /// </summary>
     [Fact]
-    public void BlockBodiedPropertyIsNotCountedAsBothPropertyAndAccessors()
+    public void ReportDisclosesActiveThresholdsAndWhatTheyWithheld()
     {
-        const string source = """
-            class Holder
-            {
-                public int Total
-                {
-                    get
-                    {
-                        var a = 1;
-                        var b = 2;
-                        return a + b;
-                    }
-                }
-            }
-            """;
+        var detectionSettings8 = new DetectionSettings
+        {
+            MinLines = 5,
+            MinTypeLines = 8,
+            MinFileSpread = 99
+        };
+        var report = Analyses.Run(detectionSettings8, [SmallMemberedClass,
+            SmallMemberedClass]);
 
-        var names = Code.Blocks(source, new DetectionSettings { MinLines = 5, Kinds = DetectionKind.Accessors })
-            .Select(block => block.MemberName)
-            .ToArray();
+        var scope = ReportDocuments.From(report, includeRawSnippets: false).Scope;
 
-        Assert.Equal(["Total.get"], names);
+        Assert.NotNull(scope);
+        Assert.Equal(99, scope.MinFileSpread);
+        Assert.Equal(8, scope.MinTypeLines);
+        Assert.Equal(1, scope.Suppressed.BelowFileSpread);
+        Assert.Contains(scope.Limitations, note => note.Contains("fewer than 99 files", StringComparison.Ordinal));
     }
 
-    // Previously: the baseline keyed on cluster id, which encodes the full membership, so a cluster
-    // that gained a copy looked like an unrelated new one and growth could never be reported.
-    [Fact]
-    public void BaselineReportsAGrownClusterAsGrownRatherThanNew()
-    {
-        var settings = new DetectionSettings { MinLines = 5, MinTypeLines = 8 };
-        var before = Analyse(settings, SmallMemberedClass, SmallMemberedClass);
-        var after = Analyse(settings, SmallMemberedClass, SmallMemberedClass, SmallMemberedClass);
-
-        var delta = BaselineDelta.Between(Baseline.From(before, TimeProvider.System), after);
-
-        Assert.Empty(delta.Added);
-        Assert.Single(delta.Grown);
-        Assert.True(delta.IsRegression);
-    }
-
-    [Fact]
-    public void BaselineReportsResolvedClustersAndSurvivesARoundTrip()
-    {
-        var settings = new DetectionSettings { MinLines = 5, MinTypeLines = 8 };
-        var before = Baseline.From(Analyse(settings, SmallMemberedClass, SmallMemberedClass), TimeProvider.System);
-        var after = Analyse(settings, SmallMemberedClass);
-
-        var delta = BaselineDelta.Between(Baseline.Parse(before.ToJson()), after);
-
-        Assert.Single(delta.Removed);
-        Assert.Empty(delta.Added);
-        Assert.False(delta.IsRegression);
-    }
-
+    /// <summary>
+    ///     
+    /// </summary>
     [Fact]
     public void SarifOutputCarriesOneResultPerClusterWithTheRestAsRelatedLocations()
     {
-        var report = Analyse(
-            new DetectionSettings { MinLines = 5, MinTypeLines = 8 },
+        var detectionSettings9 = new DetectionSettings
+        {
+            MinLines = 5,
+            MinTypeLines = 8
+        };
+        var report = Analyses.Run(detectionSettings9, [SmallMemberedClass,
             SmallMemberedClass,
-            SmallMemberedClass,
-            SmallMemberedClass);
+            SmallMemberedClass]);
 
-        using var document = JsonDocument.Parse(new SarifReportWriter().Write(report));
+        var sarifReportWriter = new SarifReportWriter();
+        using var document = JsonDocument.Parse(sarifReportWriter.Write(report));
         var run = document.RootElement.GetProperty("runs")[0];
         var result = run.GetProperty("results")[0];
 

@@ -1,42 +1,82 @@
 ﻿namespace DupDetector.Core.Model;
 
 /// <summary>
-/// A group of code blocks that duplicate one another.
+///     A group of code blocks that duplicate one another.
 /// </summary>
 public sealed record DuplicateCluster
 {
+    /// <summary>
+    ///     Gets the identity that survives copies being added, which a baseline comparison keys on.
+    /// </summary>
+    public string ContentKey
+    {
+        get
+        {
+            var lowest = Instances[0].Hash;
+            foreach (var instance in Instances)
+            {
+                if (string.CompareOrdinal(instance.Hash, lowest) < 0)
+                {
+                    lowest = instance.Hash;
+                }
+            }
+
+            return lowest;
+        }
+    }
+
+    /// <summary>
+    ///     Gets the stable identifier of this cluster.
+    /// </summary>
     public required string Id { get; init; }
 
+    /// <summary>
+    ///     Gets the places the duplicated code appears.
+    /// </summary>
     public required IReadOnlyList<CodeInstance> Instances { get; init; }
 
-    public required ClusterMetrics Metrics { get; init; }
-
-    public required string NormalizedSnippet { get; init; }
-
-    public required IReadOnlyList<string> RawSnippets { get; init; }
-
     /// <summary>
-    /// True when every instance shares one structural hash. Derived from the instances themselves,
-    /// so a verbatim copy can never be relabelled as a near-duplicate by an upstream filter.
-    /// </summary>
-    public bool IsExact => Instances.DistinctBy(instance => instance.Hash, StringComparer.Ordinal).Count() == 1;
-
-    /// <summary>
-    /// Identity that survives copies being added or removed, unlike <see cref="Id"/>, which is
-    /// derived from the full membership. This is what a baseline comparison must key on.
-    /// </summary>
-    public string ContentKey => Instances.Select(instance => instance.Hash).Order(StringComparer.Ordinal).First();
-
-    /// <summary>
-    /// True when every member is similar to every other member. False only when the clique budget
-    /// was exhausted and the group fell back to connectivity, in which case some members may not
-    /// resemble one another.
+    ///     Gets a value indicating whether every member resembles every other member.
     /// </summary>
     public required bool IsCohesive { get; init; }
 
     /// <summary>
-    /// True when the cluster spans at least two projects and at least one instance is production
-    /// code. A test-file copy of genuinely duplicated production code does not clear the flag.
+    ///     Gets a value indicating whether every instance shares one structural hash.
+    /// </summary>
+    public bool IsExact
+    {
+        get
+        {
+            var first = Instances[0].Hash;
+            foreach (var instance in Instances)
+            {
+                if (!string.Equals(instance.Hash, first, StringComparison.Ordinal))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+    }
+
+    /// <summary>
+    ///     Gets a value indicating whether this cluster represents cross-project production debt.
     /// </summary>
     public required bool IsProductionDuplicate { get; init; }
+
+    /// <summary>
+    ///     Gets the measured facts about this cluster.
+    /// </summary>
+    public required ClusterMetrics Metrics { get; init; }
+
+    /// <summary>
+    ///     Gets the shared structural form of the duplicated code.
+    /// </summary>
+    public required string NormalizedSnippet { get; init; }
+
+    /// <summary>
+    ///     Gets the verbatim source of each instance.
+    /// </summary>
+    public required IReadOnlyList<string> RawSnippets { get; init; }
 }

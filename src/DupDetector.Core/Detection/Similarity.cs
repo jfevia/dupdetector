@@ -1,40 +1,42 @@
 ﻿namespace DupDetector.Core.Detection;
 
 /// <summary>
-/// Multiset Jaccard similarity.
+///     Multiset Jaccard similarity.
 /// </summary>
 public static class Similarity
 {
     /// <summary>
-    /// Returns the multiset Jaccard similarity of two token multisets, in the range 0 to 1.
-    /// Two empty multisets are identical.
+    ///     Returns the multiset Jaccard similarity of two token multisets, treating two empty
+    ///     multisets as identical.
     /// </summary>
-    // Union is derived as |a| + |b| - overlap, so no intermediate collection is allocated per pair.
-    public static double Jaccard(TokenMultiset a, TokenMultiset b)
+    /// <param name="first">The first multiset.</param>
+    /// <param name="second">The second multiset.</param>
+    /// <returns>The similarity, in the range 0 to 1.</returns>
+    public static double Jaccard(TokenMultiset first, TokenMultiset second)
     {
-        var overlap = Overlap(a, b);
-        var union = a.Cardinality + b.Cardinality - overlap;
+        var overlap = Overlap(first, second);
+        var union = first.Cardinality + second.Cardinality - overlap;
         return union == 0 ? 1.0 : (double)overlap / union;
     }
 
     /// <summary>
-    /// Sum of <c>min(count)</c> over tokens present in both multisets, by merge-walking the two
-    /// ascending id arrays.
+    ///     Sum of the smaller count over tokens present in both multisets.
     /// </summary>
-    public static int Overlap(TokenMultiset a, TokenMultiset b)
+    /// <param name="first">The first multiset.</param>
+    /// <param name="second">The second multiset.</param>
+    /// <returns>The number of shared token occurrences.</returns>
+    public static int Overlap(TokenMultiset first, TokenMultiset second)
     {
-        ArgumentNullException.ThrowIfNull(a);
-        ArgumentNullException.ThrowIfNull(b);
-
         var overlap = 0;
-        int left = 0, right = 0;
+        var left = 0;
+        var right = 0;
 
-        while (left < a.Ids.Length && right < b.Ids.Length)
+        while (left < first.Ids.Length && right < second.Ids.Length)
         {
-            var difference = a.Ids[left] - b.Ids[right];
+            var difference = first.Ids[left] - second.Ids[right];
             if (difference == 0)
             {
-                overlap += Math.Min(a.Counts[left], b.Counts[right]);
+                overlap += Math.Min(first.Counts[left], second.Counts[right]);
                 left++;
                 right++;
             }
@@ -52,12 +54,14 @@ public static class Similarity
     }
 
     /// <summary>
-    /// Largest similarity two multisets of these sizes could possibly reach.
+    ///     Largest similarity two multisets of these sizes could possibly reach.
     /// </summary>
-    // Exact bound: a pair it rejects can never meet the threshold, so pruning on it loses no results.
-    public static double UpperBound(int cardinalityA, int cardinalityB)
+    /// <param name="firstCardinality">The size of the first multiset.</param>
+    /// <param name="secondCardinality">The size of the second multiset.</param>
+    /// <returns>The exact upper bound, in the range 0 to 1.</returns>
+    public static double UpperBound(int firstCardinality, int secondCardinality)
     {
-        var larger = Math.Max(cardinalityA, cardinalityB);
-        return larger == 0 ? 1.0 : (double)Math.Min(cardinalityA, cardinalityB) / larger;
+        var larger = Math.Max(firstCardinality, secondCardinality);
+        return larger == 0 ? 1.0 : (double)Math.Min(firstCardinality, secondCardinality) / larger;
     }
 }

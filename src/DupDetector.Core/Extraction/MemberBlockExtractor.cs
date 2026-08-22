@@ -6,19 +6,52 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 namespace DupDetector.Core.Extraction;
 
 /// <summary>
-/// Extracts whole members, and optionally whole types, from a parsed file and normalizes each one.
+///     Extracts whole members, and optionally whole types, from a parsed file and normalizes each one.
 /// </summary>
 public static class MemberBlockExtractor
 {
     /// <summary>
-    /// Returns every declaration in <paramref name="unit"/> that matches the requested kinds and
-    /// meets the minimum size.
+    ///     Names a node and reports which detection kind it belongs to.
     /// </summary>
+    /// <param name="node">The syntax node to classify.</param>
+    /// <returns>The declaration, or <c>null</c> when the node is not extractable.</returns>
+    public static DeclarationInfo? Describe(SyntaxNode node)
+    {
+        switch (node)
+        {
+            case MethodDeclarationSyntax method:
+                return new DeclarationInfo(method.Identifier.ValueText, DetectionKind.Methods);
+            case ConstructorDeclarationSyntax constructor:
+                return new DeclarationInfo(constructor.Identifier.ValueText, DetectionKind.Constructors);
+            case LocalFunctionStatementSyntax local:
+                return new DeclarationInfo(local.Identifier.ValueText, DetectionKind.LocalFunctions);
+            case AccessorDeclarationSyntax accessor:
+                return new DeclarationInfo(AccessorName(accessor), DetectionKind.Accessors);
+            case PropertyDeclarationSyntax { ExpressionBody: not null } property:
+                return new DeclarationInfo(property.Identifier.ValueText, DetectionKind.Accessors);
+            case IndexerDeclarationSyntax { ExpressionBody: not null }:
+                return new DeclarationInfo("this[]", DetectionKind.Accessors);
+            case OperatorDeclarationSyntax op:
+                return new DeclarationInfo($"operator {op.OperatorToken.ValueText}", DetectionKind.Operators);
+            case ConversionOperatorDeclarationSyntax conversion:
+                return new DeclarationInfo($"operator {conversion.Type}", DetectionKind.Operators);
+            case DestructorDeclarationSyntax destructor:
+                return new DeclarationInfo($"~{destructor.Identifier.ValueText}", DetectionKind.Destructors);
+            case BaseTypeDeclarationSyntax type:
+                return new DeclarationInfo($"{Keyword(type)} {type.Identifier.ValueText}", DetectionKind.Types);
+            default:
+                return null;
+        }
+    }
+
+    /// <summary>
+    ///     Returns every declaration that matches the requested kinds and meets the minimum size.
+    /// </summary>
+    /// <param name="unit">The parsed source file to extract from.</param>
+    /// <param name="settings">The kinds and size thresholds to apply.</param>
+    /// <returns>The extracted blocks, in document order.</returns>
     public static IReadOnlyList<CodeBlock> Extract(SourceUnit unit, DetectionSettings settings)
     {
-        ArgumentNullException.ThrowIfNull(unit);
-        ArgumentNullException.ThrowIfNull(settings);
-
         var blocks = new List<CodeBlock>();
 
         foreach (var node in unit.Tree.GetRoot().DescendantNodes())
@@ -30,7 +63,6 @@ public static class MemberBlockExtractor
 
             var span = node.GetLocation().GetLineSpan();
             var lines = new LineRange(span.StartLinePosition.Line + 1, span.EndLinePosition.Line + 1);
-
             var minimum = declaration.Kind == DetectionKind.Types ? settings.MinTypeLines : settings.MinLines;
             if (lines.Count < minimum)
             {
@@ -38,54 +70,15 @@ public static class MemberBlockExtractor
             }
 
             var normalized = StructuralNormalizer.Normalize(node);
-            blocks.Add(new CodeBlock(
-                unit.Path,
-                unit.Project,
-                unit.IsTestFile,
-                declaration.Name,
-                lines,
-                normalized.Hash,
-                normalized.Text,
-                node.ToString()));
+            var location = new CodeLocation(unit.Path, unit.Project, unit.IsTestFile, lines);
+            var content = new BlockContent(normalized.Text, node.ToString());
+            var block = new CodeBlock(location, declaration.Name, normalized.Hash, content);
+
+            blocks.Add(block);
         }
 
         return blocks;
     }
-
-    /// <summary>
-    /// Names a node and reports which detection kind it belongs to, or <c>null</c> when the node is
-    /// not an extractable declaration.
-    /// </summary>
-    internal static (string Name, DetectionKind Kind)? Describe(SyntaxNode node) => node switch
-    {
-        MethodDeclarationSyntax method => (method.Identifier.ValueText, DetectionKind.Methods),
-        ConstructorDeclarationSyntax constructor => (constructor.Identifier.ValueText, DetectionKind.Constructors),
-        LocalFunctionStatementSyntax local => (local.Identifier.ValueText, DetectionKind.LocalFunctions),
-        AccessorDeclarationSyntax accessor => (AccessorName(accessor), DetectionKind.Accessors),
-
-        // Only when arrow-bodied: a block-bodied property is covered by its accessors, and matching
-        // it here as well would report the same code twice.
-        PropertyDeclarationSyntax { ExpressionBody: not null } property => (property.Identifier.ValueText, DetectionKind.Accessors),
-        IndexerDeclarationSyntax { ExpressionBody: not null } => ("this[]", DetectionKind.Accessors),
-
-        OperatorDeclarationSyntax op => ($"operator {op.OperatorToken.ValueText}", DetectionKind.Operators),
-        ConversionOperatorDeclarationSyntax conversion => ($"operator {conversion.Type}", DetectionKind.Operators),
-        DestructorDeclarationSyntax destructor => ($"~{destructor.Identifier.ValueText}", DetectionKind.Destructors),
-
-        // Every type kind at once. Matching the shared base rather than each derived kind removes the
-        // ordering hazard that a record, being also a class, would otherwise be labelled one.
-        BaseTypeDeclarationSyntax type => ($"{Keyword(type)} {type.Identifier.ValueText}", DetectionKind.Types),
-
-        _ => null,
-    };
-
-    /// <summary>
-    /// The declaring keyword, taken from the source rather than from the node type, so
-    /// <c>record struct</c> reads as <c>record</c>.
-    /// </summary>
-    private static string Keyword(BaseTypeDeclarationSyntax type) =>
-        // An enum is the one type declaration that carries no shared Keyword token.
-        type is TypeDeclarationSyntax declaration ? declaration.Keyword.ValueText : "enum";
 
     private static string AccessorName(AccessorDeclarationSyntax accessor)
     {
@@ -93,10 +86,20 @@ public static class MemberBlockExtractor
         {
             PropertyDeclarationSyntax property => property.Identifier.ValueText,
             IndexerDeclarationSyntax => "this[]",
-            EventDeclarationSyntax evt => evt.Identifier.ValueText,
+            EventDeclarationSyntax declaration => declaration.Identifier.ValueText,
             _ => "?",
         };
 
         return $"{owner}.{accessor.Keyword.ValueText}";
+    }
+
+    /// <summary>
+    ///     The declaring keyword, taken from the source so <c>record struct</c> reads as <c>record</c>.
+    /// </summary>
+    /// <param name="type">The type declaration to name.</param>
+    /// <returns>The keyword that introduced the type.</returns>
+    private static string Keyword(BaseTypeDeclarationSyntax type)
+    {
+        return type is TypeDeclarationSyntax declaration ? declaration.Keyword.ValueText : "enum";
     }
 }

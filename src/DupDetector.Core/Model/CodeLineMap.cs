@@ -1,61 +1,53 @@
-﻿using Microsoft.CodeAnalysis;
-using Microsoft.CodeAnalysis.CSharp;
-
-namespace DupDetector.Core.Model;
+﻿namespace DupDetector.Core.Model;
 
 /// <summary>
-/// Which physical lines of a file carry code rather than blanks or comments.
+///     Which physical lines of a file carry code rather than blanks or comments.
 /// </summary>
-// Derived from parsed tokens, so "//" inside a string literal is not mistaken for a comment.
 public sealed class CodeLineMap
 {
     private readonly bool[] _isCode;
 
-    private CodeLineMap(bool[] isCode)
-    {
-        _isCode = isCode;
-        Total = isCode.Count(value => value);
-    }
+    /// <summary>
+    ///     Gets a map for a file with no analysable lines.
+    /// </summary>
+    public static CodeLineMap Empty { get; }
 
-    /// <summary>A file with no analysable lines.</summary>
-    public static CodeLineMap Empty { get; } = new([]);
-
-    /// <summary>Number of lines carrying code.</summary>
+    /// <summary>
+    ///     Gets the number of lines carrying code.
+    /// </summary>
     public int Total { get; }
 
-    /// <summary>Builds the map from a parsed file.</summary>
-    public static CodeLineMap Create(SyntaxTree tree, int lineCount)
+    static CodeLineMap()
     {
-        ArgumentNullException.ThrowIfNull(tree);
-
-        if (lineCount <= 0)
-        {
-            return Empty;
-        }
-
-        var isCode = new bool[lineCount];
-        var text = tree.GetText();
-
-        foreach (var token in tree.GetRoot().DescendantTokens())
-        {
-            if (token.IsKind(SyntaxKind.EndOfFileToken) || token.Span.IsEmpty)
-            {
-                continue;
-            }
-
-            var first = text.Lines.GetLineFromPosition(token.Span.Start).LineNumber;
-            var last = text.Lines.GetLineFromPosition(token.Span.End).LineNumber;
-
-            for (var line = first; line <= last && line < isCode.Length; line++)
-            {
-                isCode[line] = true;
-            }
-        }
-
-        return new CodeLineMap(isCode);
+        var empty = new CodeLineMap([]);
+        Empty = empty;
     }
 
-    /// <summary>Counts code lines inside a one-based, inclusive range.</summary>
+    /// <summary>
+    ///     
+    /// </summary>
+    /// <param name="isCode"></param>
+    public CodeLineMap(bool[] isCode)
+    {
+        _isCode = isCode;
+
+        var total = 0;
+        foreach (var value in isCode)
+        {
+            if (value)
+            {
+                total++;
+            }
+        }
+
+        Total = total;
+    }
+
+    /// <summary>
+    ///     Counts code lines inside a one-based, inclusive range.
+    /// </summary>
+    /// <param name="range">The range to count within.</param>
+    /// <returns>The number of code lines in the range.</returns>
     public int CountIn(LineRange range)
     {
         var count = 0;

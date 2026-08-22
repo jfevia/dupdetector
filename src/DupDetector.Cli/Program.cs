@@ -1,20 +1,33 @@
-﻿using System.Diagnostics.CodeAnalysis;
-using System.Text;
-using Microsoft.Build.Locator;
+﻿using Microsoft.Build.Locator;
 using Microsoft.Extensions.Logging;
+using System.Diagnostics.CodeAnalysis;
+using System.Text;
 
 namespace DupDetector.Cli;
 
 /// <summary>
-/// Composition root. Wiring only: every decision lives in <see cref="CliHost"/>.
+///     Composition root. Wiring only: every decision lives in <see cref="CliHost"/>.
 /// </summary>
 [ExcludeFromCodeCoverage(Justification = "Wiring only; all behaviour lives in CliHost, which is covered by the CLI suite.")]
-internal static class Program
+public static class Program
 {
+
+    private static bool CanTryRegisterDefaults()
+    {
+        try
+        {
+            MSBuildLocator.RegisterDefaults();
+            return true;
+        }
+        catch (InvalidOperationException)
+        {
+            return false;
+        }
+    }
     private static int Main(string[] args)
     {
         Console.OutputEncoding = Encoding.UTF8;
-        RegisterMsBuild();
+        RegisterMicrosoftBuild();
 
         var verbose = args.Contains("--verbose", StringComparer.Ordinal);
 
@@ -22,30 +35,23 @@ internal static class Program
             .SetMinimumLevel(verbose ? LogLevel.Information : LogLevel.Warning)
             .AddConsole(options => options.LogToStandardErrorThreshold = LogLevel.Trace));
 
-        var host = new CliHost(loggerFactory.CreateLogger("dupdetector"), new ConsoleOutputSink());
-        var version = typeof(Program).Assembly.GetName().Version?.ToString(3) ?? "0.0.0";
+        var consoleOutputSink = new ConsoleOutputSink();
+        var host = new CliHost(loggerFactory.CreateLogger("dupdetector"), consoleOutputSink);
 
-        return (int)host.Run(args, version);
+        return (int)host.Run(args, ToolVersion.Value, CancellationToken.None);
     }
 
     /// <summary>
-    /// MSBuild must be located before any workspace type loads. Only solution and project inputs
-    /// need it, so a machine without it can still scan directories.
+    ///     MSBuild must be located before any workspace type loads. Only solution and project inputs
+    ///     need it, so a machine without it can still scan directories.
     /// </summary>
-    private static void RegisterMsBuild()
+    private static void RegisterMicrosoftBuild()
     {
         if (MSBuildLocator.IsRegistered)
         {
             return;
         }
 
-        try
-        {
-            MSBuildLocator.RegisterDefaults();
-        }
-        catch (InvalidOperationException)
-        {
-            // Directory scanning does not need MSBuild.
-        }
+        _ = CanTryRegisterDefaults();
     }
 }

@@ -3,41 +3,91 @@
 namespace DupDetector.Core.Model;
 
 /// <summary>
-/// A parsed source file together with its project and its path relative to the scan root.
-/// Test classification uses the relative path, so a checkout living under a directory such as
-/// <c>C:\test\</c> cannot mark an entire tree as tests.
+///     A parsed source file together with its project and its path relative to the scan root.
 /// </summary>
-public sealed record SourceUnit(
-    string Path,
-    string RelativePath,
-    string Text,
-    SyntaxTree Tree,
-    ProjectIdentity Project,
-    bool IsTestFile)
+public sealed record SourceUnit
 {
+
     /// <summary>
-    /// Projects to the descriptor retained after extraction, allowing the syntax tree to be released.
+    ///     Gets a value indicating whether the file is classified as test code.
     /// </summary>
+    public bool IsTestFile
+    {
+        get
+        {
+            return Origin.IsTestFile;
+        }
+    }
+
+    /// <summary>
+    ///     Gets where the file came from.
+    /// </summary>
+    public SourceOrigin Origin { get; }
+
+    /// <summary>
+    ///     Gets the absolute path of the file.
+    /// </summary>
+    public string Path { get; }
+
+    /// <summary>
+    ///     Gets the project the file belongs to.
+    /// </summary>
+    public ProjectIdentity Project
+    {
+        get
+        {
+            return Origin.Project;
+        }
+    }
+
+    /// <summary>
+    ///     Gets the path relative to the scan root.
+    /// </summary>
+    public string RelativePath
+    {
+        get
+        {
+            return Origin.RelativePath;
+        }
+    }
+
+    /// <summary>
+    ///     Gets the file contents.
+    /// </summary>
+    public string Text { get; }
+
+    /// <summary>
+    ///     Gets the parsed syntax tree.
+    /// </summary>
+    public SyntaxTree Tree { get; }
+
+    /// <summary>
+    ///     Initializes a new instance of the <see cref="SourceUnit"/> class.
+    /// </summary>
+    /// <param name="path">The absolute path of the file.</param>
+    /// <param name="text">The file contents.</param>
+    /// <param name="tree">The parsed syntax tree.</param>
+    /// <param name="origin">Where the file came from.</param>
+    public SourceUnit(string path, string text, SyntaxTree tree, SourceOrigin origin)
+    {
+        Path = path;
+        Text = text;
+        Tree = tree;
+        Origin = origin;
+    }
+
+    /// <summary>
+    ///     Projects to the descriptor retained after extraction, releasing the syntax tree.
+    /// </summary>
+    /// <returns>The retained file descriptor.</returns>
     public SourceFile ToFile()
     {
         var lineCount = LineCounter.Count(Text);
-        return new SourceFile(Path, RelativePath, Project, lineCount, IsTestFile)
+        var file = new SourceFile(Path, Origin, lineCount)
         {
-            CodeLines = CodeLineMap.Create(Tree, lineCount),
+            CodeLines = CodeLineMaps.Create(Tree, lineCount),
         };
-    }
-}
 
-/// <summary>
-/// What the pipeline keeps about a file once its blocks have been extracted.
-/// </summary>
-public sealed record SourceFile(
-    string Path,
-    string RelativePath,
-    ProjectIdentity Project,
-    int LineCount,
-    bool IsTestFile)
-{
-    /// <summary>Which of this file's lines carry code.</summary>
-    public CodeLineMap CodeLines { get; init; } = CodeLineMap.Empty;
+        return file;
+    }
 }

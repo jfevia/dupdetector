@@ -1,42 +1,41 @@
 ﻿using DupDetector.Core.Model;
 
+using DupDetector.Core.Model.Reporting;
+
 namespace DupDetector.Sources;
 
-public enum SourceDiagnosticSeverity
-{
-    Info,
-    Warning,
-    Error,
-}
-
 /// <summary>
-/// Something the loader needs to tell the caller about.
+///     Everything a load produced: the files, how many were seen and skipped, and what went wrong.
 /// </summary>
-// Diagnostics are data, not console writes, so loading stays usable as a library and testable.
-public sealed record SourceDiagnostic(SourceDiagnosticSeverity Severity, string Message, string? Path = null)
+public sealed record SourceLoadResult
 {
-    public static SourceDiagnostic Warning(string message, string? path = null) =>
-        new(SourceDiagnosticSeverity.Warning, message, path);
+    /// <summary>
+    ///     A result that loaded nothing.
+    /// </summary>
+    public static SourceLoadResult Empty { get; }
 
-    public static SourceDiagnostic Error(string message, string? path = null) =>
-        new(SourceDiagnosticSeverity.Error, message, path);
-}
+    /// <summary>
+    ///     
+    /// </summary>
+    public required IReadOnlyList<SourceDiagnostic> Diagnostics { get; init; }
 
-/// <summary>
-/// Everything a load produced: the files, how many were seen and skipped, and what went wrong.
-/// </summary>
-public sealed record SourceLoadResult(
-    IReadOnlyList<SourceUnit> Units,
-    DiscoveryStats Stats,
-    IReadOnlyList<SourceDiagnostic> Diagnostics)
-{
-    public static SourceLoadResult Empty { get; } = new([], DiscoveryStats.Empty, []);
-}
+    /// <summary>
+    ///     
+    /// </summary>
+    public required DiscoveryStats Stats { get; init; }
 
-/// <summary>
-/// Loads source files from one input path.
-/// </summary>
-public interface ISourceProvider
-{
-    SourceLoadResult Load(string path, DetectionSettings settings, CancellationToken cancellationToken = default);
+    /// <summary>
+    ///     
+    /// </summary>
+    public required IReadOnlyList<SourceUnit> Units { get; init; }
+
+    static SourceLoadResult()
+    {
+        Empty = new()
+        {
+            Units = [],
+            Stats = DiscoveryStats.Empty,
+            Diagnostics = [],
+        };
+    }
 }

@@ -4,16 +4,14 @@ using DupDetector.Core.Model;
 namespace DupDetector.Core.Pipeline;
 
 /// <summary>
-/// The boundaries of what a run actually measured.
+///     The boundaries of what a run actually measured.
 /// </summary>
-// Published with every report so a low percentage cannot be read as a clean bill of health.
 public sealed record AnalysisScope
 {
-    public required DetectionSettings Settings { get; init; }
 
-    public required SuppressionCounts Suppressed { get; init; }
-
-    /// <summary>Plain-language statements of what the run excluded.</summary>
+    /// <summary>
+    ///     Plain-language statements of what the run excluded.
+    /// </summary>
     public IReadOnlyList<string> Limitations
     {
         get
@@ -44,7 +42,7 @@ public sealed record AnalysisScope
                 notes.Add($"Near-duplicate clusters with more than {Settings.MaxOccurrences} copies were excluded.");
             }
 
-            if (Settings.ExcludeTestFiles)
+            if (Settings.IsExcludeTestFiles)
             {
                 notes.Add("Test files were excluded from the run, including from the line totals.");
             }
@@ -58,4 +56,14 @@ public sealed record AnalysisScope
             return notes;
         }
     }
+
+    /// <summary>
+    ///     
+    /// </summary>
+    public required DetectionSettings Settings { get; init; }
+
+    /// <summary>
+    ///     
+    /// </summary>
+    public required SuppressionCounts Suppressed { get; init; }
 }

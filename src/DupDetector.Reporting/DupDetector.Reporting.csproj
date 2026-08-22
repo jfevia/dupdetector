@@ -15,10 +15,6 @@
     </ItemGroup>
 
     <ItemGroup>
-        <EmbeddedResource Include="Assets\*" />
-    </ItemGroup>
-
-    <ItemGroup>
         <InternalsVisibleTo Include="DupDetector.Reporting.Tests" />
     </ItemGroup>
 

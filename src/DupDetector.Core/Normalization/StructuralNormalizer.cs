@@ -1,32 +1,29 @@
-﻿using System.Security.Cryptography;
+﻿using Microsoft.CodeAnalysis;
+using System.Security.Cryptography;
 using System.Text;
-using Microsoft.CodeAnalysis;
 
 namespace DupDetector.Core.Normalization;
 
 /// <summary>
-/// The normalized text of a member and its structural hash.
-/// </summary>
-public readonly record struct NormalizedBlock(string Text, string Hash);
-
-/// <summary>
-/// Produces the structural form of a member and its hash in a single rewrite.
+///     Produces the structural form of a member and its hash in a single rewrite.
 /// </summary>
 public static class StructuralNormalizer
 {
     /// <summary>
-    /// Normalizes <paramref name="node"/>, returning its text and hash together. Callers never need
-    /// a second pass, so a member is rewritten exactly once.
+    ///     Normalizes a node, returning its text and hash together so it is rewritten exactly once.
     /// </summary>
+    /// <param name="node">The syntax node to normalize.</param>
+    /// <returns>The structural form and its hash.</returns>
     public static NormalizedBlock Normalize(SyntaxNode node)
     {
-        ArgumentNullException.ThrowIfNull(node);
-
-        var declared = DeclaredNameCollector.Collect(node);
-        var rewritten = new NormalizingRewriter(declared).Visit(node);
+        var declared = DeclaredNames.Collect(node);
+        var rewriter = new NormalizingRewriter(declared);
+        var rewritten = rewriter.Visit(node);
         var text = rewritten.ToFullString().Trim();
-        var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text))).ToLowerInvariant();
+        var digest = SHA256.HashData(Encoding.UTF8.GetBytes(text));
+        var hash = Convert.ToHexString(digest).ToLowerInvariant();
+        var block = new NormalizedBlock(text, hash);
 
-        return new NormalizedBlock(text, hash);
+        return block;
     }
 }

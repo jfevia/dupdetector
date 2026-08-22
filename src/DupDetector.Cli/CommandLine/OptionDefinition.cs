@@ -1,53 +1,54 @@
 ﻿namespace DupDetector.Cli.CommandLine;
 
-/// <summary>What the process returns.</summary>
-public enum ExitCode
+/// <summary>
+///     One command-line option.
+/// </summary>
+public sealed record OptionDefinition
 {
-    /// <summary>Analysis completed and no gate was breached.</summary>
-    Success = 0,
-
-    /// <summary>The command line could not be understood.</summary>
-    UsageError = 1,
-
-    /// <summary>Analysis could not be completed.</summary>
-    RuntimeError = 2,
-
-    /// <summary>Analysis completed but duplication exceeded <c>--fail-on</c>.</summary>
-    ThresholdExceeded = 3,
+    /// <summary>
+    ///     
+    /// </summary>
+    public required OptionArity Arity { get; init; }
 
     /// <summary>
-    /// Analysis completed but duplication appeared or spread since the baseline, under
-    /// <c>--fail-on-new</c>. Distinct from <see cref="ThresholdExceeded"/> so a pipeline can tell a
-    /// regression apart from a codebase that was already over its absolute limit.
+    ///     The default shown in help, or <c>null</c> when the option has none.
     /// </summary>
-    NewDuplication = 4,
-}
+    public string? Default { get; init; }
 
-/// <summary>How an option consumes the command line.</summary>
-public enum OptionArity
-{
-    /// <summary>Present or absent, with no value.</summary>
-    None,
+    /// <summary>
+    ///     
+    /// </summary>
+    public required string Description { get; init; }
 
-    /// <summary>Takes one value and replaces any earlier value.</summary>
-    SingleValue,
+    /// <summary>
+    ///     
+    /// </summary>
+    public string Display
+    {
+        get
+        {
+            return Arity == OptionArity.None ? Name : $"{Name} <{ValueName}>";
+        }
+    }
 
-    /// <summary>Takes one value and accumulates across repetitions.</summary>
-    Repeatable,
-}
+    /// <summary>
+    ///     
+    /// </summary>
+    public string HelpText
+    {
+        get
+        {
+            return Default is null ? Description : $"{Description} (default: {Default})";
+        }
+    }
 
-/// <summary>
-/// One command-line option.
-/// </summary>
-// Help text is generated from this table, so a documented default cannot drift from the real one.
-public sealed record OptionDefinition(
-    string Name,
-    OptionArity Arity,
-    string ValueName,
-    string Description,
-    string? Default = null)
-{
-    public string Display => Arity == OptionArity.None ? Name : $"{Name} <{ValueName}>";
+    /// <summary>
+    ///     
+    /// </summary>
+    public required string Name { get; init; }
 
-    public string HelpText => Default is null ? Description : $"{Description} (default: {Default})";
+    /// <summary>
+    ///     
+    /// </summary>
+    public required string ValueName { get; init; }
 }

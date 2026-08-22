@@ -3,14 +3,32 @@
 namespace DupDetector.Sources;
 
 /// <summary>
-/// Decodes a source file, detecting UTF-16 even when no byte-order mark is present.
+///     Decodes a source file, detecting UTF-16 even when no byte-order mark is present.
 /// </summary>
-// UTF-16 read as UTF-8 yields NUL-interleaved text that parses into garbage, so the pattern is sniffed.
 public static class SourceDecoder
 {
-    /// <summary>Number of leading bytes examined when sniffing an unmarked file.</summary>
+    /// <summary>
+    ///     Number of leading bytes examined when sniffing an unmarked file.
+    /// </summary>
     private const int SampleBytes = 512;
 
+    /// <summary>
+    ///     
+    /// </summary>
+    /// <returns></returns>
+    /// <param name="bytes"></param>
+    public static string Decode(byte[] bytes)
+    {
+
+        var encoding = Detect(bytes);
+        return encoding.GetString(bytes).TrimStart('\uFEFF');
+    }
+
+    /// <summary>
+    ///     
+    /// </summary>
+    /// <returns></returns>
+    /// <param name="bytes"></param>
     public static Encoding Detect(ReadOnlySpan<byte> bytes)
     {
         if (bytes.Length >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF)
@@ -31,18 +49,9 @@ public static class SourceDecoder
         return SniffUnmarked(bytes);
     }
 
-    public static string Decode(byte[] bytes)
-    {
-        ArgumentNullException.ThrowIfNull(bytes);
-
-        var encoding = Detect(bytes);
-        // GetString keeps a byte-order mark as a leading zero-width character; strip it.
-        return encoding.GetString(bytes).TrimStart('\uFEFF');
-    }
-
     /// <summary>
-    /// Guesses UTF-16 from the NUL padding that ASCII-range characters produce, choosing the
-    /// endianness by which half of each code unit is zero.
+    ///     Guesses UTF-16 from the NUL padding that ASCII-range characters produce, choosing the
+    ///     endianness by which half of each code unit is zero.
     /// </summary>
     private static Encoding SniffUnmarked(ReadOnlySpan<byte> bytes)
     {

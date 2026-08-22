@@ -1,39 +1,48 @@
 ﻿using DupDetector.Core.Model;
 
+using DupDetector.Core.Model.Reporting;
+
+using DupDetector.Sources.Providers;
+
 namespace DupDetector.Sources;
 
 /// <summary>
-/// Loads every input path and merges the results.
+///     Loads every input path and merges the results.
 /// </summary>
-public sealed class SourceLoader(Func<string, ISourceProvider>? providerFactory = null)
+public sealed class SourceLoader
 {
-    private readonly Func<string, ISourceProvider> _providerFactory = providerFactory ?? Resolve;
+    private readonly SourceProviderFactory _providerFactory;
 
-    /// <summary>Chooses the provider for a path by its extension.</summary>
-    public static ISourceProvider Resolve(string path)
+    /// <summary>
+    ///     
+    /// </summary>
+    public SourceLoader()
+        : this(SourceLoaders.Resolve)
     {
-        ArgumentNullException.ThrowIfNull(path);
-
-        if (SlnxSourceProvider.Handles(path))
-        {
-            return new SlnxSourceProvider();
-        }
-
-        return MsBuildSourceProvider.Handles(path) ? new MsBuildSourceProvider() : new FileSystemSourceProvider();
     }
 
     /// <summary>
-    /// Loads all paths, combining discovery counts and reporting the discovery mode as mixed when
-    /// the inputs were reached different ways.
+    ///     
     /// </summary>
+    /// <param name="providerFactory"></param>
+    public SourceLoader(SourceProviderFactory providerFactory)
+    {
+        _providerFactory = providerFactory;
+    }
+
+    /// <summary>
+    ///     Loads all paths, combining discovery counts and reporting the discovery mode as mixed when
+    ///     the inputs were reached different ways.
+    /// </summary>
+    /// <param name="paths">The files, directories, projects or solutions to load.</param>
+    /// <param name="settings">The settings that decide which files are skipped.</param>
+    /// <param name="cancellationToken">Cancels the load between paths.</param>
+    /// <returns>The loaded units, discovery counts and any diagnostics.</returns>
     public SourceLoadResult Load(
         IReadOnlyList<string> paths,
         DetectionSettings settings,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(paths);
-        ArgumentNullException.ThrowIfNull(settings);
-
         var units = new List<SourceUnit>();
         var diagnostics = new List<SourceDiagnostic>();
         var modes = new HashSet<DiscoveryMode>();
@@ -59,10 +68,29 @@ public sealed class SourceLoader(Func<string, ISourceProvider>? providerFactory 
         var mode = modes.Count switch
         {
             0 => DiscoveryMode.None,
-            1 => modes.First(),
+            1 => FirstMode(modes),
             _ => DiscoveryMode.Mixed,
         };
 
-        return new SourceLoadResult(units, new DiscoveryStats(discovered, excluded, mode), diagnostics);
+        static DiscoveryMode FirstMode(HashSet<DiscoveryMode> found)
+        {
+            using var values = found.GetEnumerator();
+            return values.MoveNext() ? values.Current : DiscoveryMode.None;
+        }
+
+        var discoveryStats = new DiscoveryStats
+        {
+            Discovered = discovered,
+            Excluded = excluded,
+            Mode = mode
+        };
+
+        var sourceLoadResult = new SourceLoadResult
+        {
+            Units = units,
+            Stats = discoveryStats,
+            Diagnostics = diagnostics,
+        };
+        return sourceLoadResult;
     }
 }

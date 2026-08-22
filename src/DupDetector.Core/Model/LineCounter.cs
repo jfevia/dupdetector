@@ -1,18 +1,17 @@
 ﻿namespace DupDetector.Core.Model;
 
 /// <summary>
-/// Counts physical lines without the trailing-newline inflation of <c>Split('\n').Length</c>.
+///     Counts physical lines without the trailing-newline inflation of <c>Split</c>.
 /// </summary>
 public static class LineCounter
 {
     /// <summary>
-    /// Returns the number of lines in <paramref name="text"/>. An empty string has zero lines,
-    /// and a trailing newline does not add a phantom line.
+    ///     Returns the number of lines, treating an empty string as zero.
     /// </summary>
+    /// <param name="text">The text to count.</param>
+    /// <returns>The number of physical lines.</returns>
     public static int Count(string text)
     {
-        ArgumentNullException.ThrowIfNull(text);
-
         if (text.Length == 0)
         {
             return 0;

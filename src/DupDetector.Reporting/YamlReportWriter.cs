@@ -1,27 +1,80 @@
-﻿using DupDetector.Core.Model;
+﻿using DupDetector.Core.Model.Reporting;
+using DupDetector.Reporting.Documents;
+
 using YamlDotNet.Serialization;
+
 using YamlDotNet.Serialization.NamingConventions;
 
 namespace DupDetector.Reporting;
 
 /// <summary>
-/// Writes the report as YAML.
+///     Writes the report as YAML.
 /// </summary>
-// Delegated to YamlDotNet, which makes quoting and culture-invariant numbers correct by construction.
-public sealed class YamlReportWriter(bool includeRawSnippets = true) : IReportWriter
+public sealed class YamlReportWriter : IReportWriter
 {
-    private static readonly ISerializer Serializer = new SerializerBuilder()
-        .WithNamingConvention(CamelCaseNamingConvention.Instance)
+    private static readonly ISerializer Serializer;
+    private readonly bool _isIncludeRawSnippets;
+
+    /// <summary>
+    ///     
+    /// </summary>
+    public bool IsIncludeRawSnippets
+    {
+        get
+        {
+            return _isIncludeRawSnippets;
+        }
+    }
+
+    static YamlReportWriter()
+    {
+        var serializerBuilder = new SerializerBuilder();
+        Serializer = serializerBuilder.WithNamingConvention(CamelCaseNamingConvention.Instance)
         .ConfigureDefaultValuesHandling(DefaultValuesHandling.OmitNull)
         .WithQuotingNecessaryStrings()
         .Build();
+    }
 
-    public ReportFormat Format => ReportFormat.Yaml;
+    /// <summary>
+    ///     
+    /// </summary>
+    public YamlReportWriter()
+        : this(true)
+    {
+    }
 
-    public bool IncludeRawSnippets => includeRawSnippets;
+    /// <summary>
+    ///     
+    /// </summary>
+    /// <param name="includeRawSnippets"></param>
+    public YamlReportWriter(bool includeRawSnippets)
+    {
+        _isIncludeRawSnippets = includeRawSnippets;
+    }
 
+    /// <summary>
+    ///     
+    /// </summary>
+    public ReportFormat Format
+    {
+        get
+        {
+            return ReportFormat.Yaml;
+        }
+    }
+
+    /// <summary>
+    ///     
+    /// </summary>
     public MetadataDocument? Metadata { get; init; }
 
-    public string Write(DetectionReport report) =>
-        Serializer.Serialize(ReportDocument.From(report, includeRawSnippets, Metadata));
+    /// <summary>
+    ///     
+    /// </summary>
+    /// <returns></returns>
+    /// <param name="report"></param>
+    public string Write(DetectionReport report)
+    {
+        return Serializer.Serialize(ReportDocuments.From(report, _isIncludeRawSnippets, Metadata));
+    }
 }

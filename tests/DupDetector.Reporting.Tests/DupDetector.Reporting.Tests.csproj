@@ -5,10 +5,15 @@
         <AssemblyName>DupDetector.Reporting.Tests</AssemblyName>
         <IsPackable>false</IsPackable>
         <IsTestProject>true</IsTestProject>
+        <GenerateProgramFile>false</GenerateProgramFile>
         <GenerateDocumentationFile>false</GenerateDocumentationFile>
         <NoWarn>$(NoWarn);CA1707;CA2201;CA1861;CA1515</NoWarn>
         <NoWarn>$(NoWarn);EnableGenerateDocumentationFile</NoWarn>
     </PropertyGroup>
+
+    <ItemGroup>
+        <Compile Include="..\TestEntryPoint.cs" Link="TestEntryPoint.cs" />
+    </ItemGroup>
 
     <ItemGroup>
         <PackageReference Include="Microsoft.NET.Test.Sdk" />

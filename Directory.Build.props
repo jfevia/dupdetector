@@ -27,14 +27,24 @@
     </PropertyGroup>
 
     <PropertyGroup>
-        <!-- CS1591: members are documented where they carry meaning, not mechanically. -->
-        <NoWarn>$(NoWarn);CS1591</NoWarn>
         <!-- CA2007: console tool and test host; there is no synchronization context to capture. -->
         <NoWarn>$(NoWarn);CA2007</NoWarn>
+        <!-- IDE0290 requires primary constructors; ATXCS037 forbids them. Automaticks wins. -->
+        <NoWarn>$(NoWarn);IDE0290</NoWarn>
+        <!-- IDE0066 requires a switch expression; ATXCS058 forbids the inline new inside one. -->
+        <NoWarn>$(NoWarn);IDE0066</NoWarn>
+        <!-- S3963 requires inline static field initialisers; ATXCS036 forbids them. Automaticks wins. -->
+        <NoWarn>$(NoWarn);S3963</NoWarn>
+        <!-- S1075: SARIF requires absolute informationUri/helpUri; the tool's own URLs are not environment specific. -->
+        <NoWarn>$(NoWarn);S1075</NoWarn>
     </PropertyGroup>
 
     <ItemGroup>
         <PackageReference Include="SonarAnalyzer.CSharp" PrivateAssets="all" />
+        <PackageReference Include="Automaticks.CSharp.Analyzers" PrivateAssets="all" />
+        <PackageReference Include="Automaticks.Linq.Analyzers" PrivateAssets="all" />
+        <PackageReference Include="Automaticks.Reflection.Analyzers" PrivateAssets="all" />
+        <PackageReference Include="Automaticks.Diagnostics.CodeAnalysis.Analyzers" PrivateAssets="all" />
     </ItemGroup>
 
 </Project>

@@ -5,28 +5,26 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 namespace DupDetector.Core.Normalization;
 
 /// <summary>
-/// Rewrites a member into its structural form.
+///     Rewrites a member into its structural form.
 /// </summary>
-// Declared identifiers become var0, var1...; type and member-access names are left untouched.
-internal sealed class NormalizingRewriter : CSharpSyntaxRewriter
+public sealed class NormalizingRewriter : CSharpSyntaxRewriter
 {
     private readonly HashSet<string> _declared;
-    private readonly Dictionary<string, string> _renames = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, string> _renames;
 
-    internal NormalizingRewriter(HashSet<string> declared)
+    /// <summary>
+    ///     Initializes a new instance of the <see cref="NormalizingRewriter"/> class.
+    /// </summary>
+    /// <param name="declared">The identifiers the block declares.</param>
+    public NormalizingRewriter(HashSet<string> declared)
         : base(visitIntoStructuredTrivia: false)
-        => _declared = declared;
-
-    public override SyntaxToken VisitToken(SyntaxToken token)
     {
-        if (token.IsKind(SyntaxKind.IdentifierToken) && _declared.Contains(token.ValueText) && !IsMemberName(token))
-        {
-            return SyntaxFactory.Identifier(Rename(token.ValueText)).WithTrailingTrivia(SyntaxFactory.Space);
-        }
-
-        return token.WithLeadingTrivia(SyntaxTriviaList.Empty).WithTrailingTrivia(SyntaxFactory.Space);
+        var renames = new Dictionary<string, string>(StringComparer.Ordinal);
+        _declared = declared;
+        _renames = renames;
     }
 
+    /// <inheritdoc/>
     public override SyntaxNode VisitLiteralExpression(LiteralExpressionSyntax node)
     {
         var placeholder = node.Kind() switch
@@ -43,26 +41,21 @@ internal sealed class NormalizingRewriter : CSharpSyntaxRewriter
             SyntaxFactory.Identifier(placeholder).WithTrailingTrivia(SyntaxFactory.Space));
     }
 
-    /// <summary>
-    /// True when the token is the member half of <c>a.B</c>, <c>a?.B</c> or <c>A.B</c>, which must
-    /// keep its original name even if a local happens to share it.
-    /// </summary>
-    private static bool IsMemberName(SyntaxToken token)
+    /// <inheritdoc/>
+    public override SyntaxToken VisitToken(SyntaxToken token)
     {
-        if (token.Parent is not IdentifierNameSyntax name)
+        if (token.IsKind(SyntaxKind.IdentifierToken) && _declared.Contains(token.ValueText) && !MemberNames.IsMemberName(token))
         {
-            return false;
+            return SyntaxFactory.Identifier(Rename(token.ValueText)).WithTrailingTrivia(SyntaxFactory.Space);
         }
 
-        return name.Parent switch
-        {
-            MemberAccessExpressionSyntax access => access.Name == name,
-            MemberBindingExpressionSyntax binding => binding.Name == name,
-            QualifiedNameSyntax qualified => qualified.Right == name,
-            _ => false,
-        };
+        return token.WithLeadingTrivia(SyntaxTriviaList.Empty).WithTrailingTrivia(SyntaxFactory.Space);
     }
 
+    /// <summary>
+    ///     True when the token is the member half of <c>a.B</c>, <c>a?.B</c> or <c>A.B</c>, which must
+    ///     keep its original name even if a local happens to share it.
+    /// </summary>
     private string Rename(string original)
     {
         if (!_renames.TryGetValue(original, out var renamed))
