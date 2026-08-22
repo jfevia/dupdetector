@@ -120,7 +120,7 @@ public class ArgumentParserTests
     [Theory]
     [InlineData("yaml", ReportFormat.Yaml)]
     [InlineData("json", ReportFormat.Json)]
-    [InlineData("markup", ReportFormat.Html)]
+    [InlineData("html", ReportFormat.Html)]
     public void KnownFormats_AreAccepted(string value, ReportFormat expected)
     {
         Assert.Equal(expected, CliFixtures.Options(["./src", "--format", value]).Format);

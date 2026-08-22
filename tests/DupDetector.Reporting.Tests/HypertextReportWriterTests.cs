@@ -16,7 +16,7 @@ public class HypertextReportWriterTests
     [Fact]
     public void EachEmbeddedAssetCarriesItsExpectedMarker()
     {
-        Assert.Contains("<!DOCTYPE markup>", ReportTemplate.Text, StringComparison.Ordinal);
+        Assert.Contains("<!DOCTYPE html>", ReportTemplate.Text, StringComparison.Ordinal);
         Assert.Contains("body", ReportStyle.Text, StringComparison.Ordinal);
         Assert.Contains("report-data", ReportScript.Text, StringComparison.Ordinal);
     }
@@ -37,10 +37,10 @@ public class HypertextReportWriterTests
     [Fact]
     public void HypertextIsSelectableThroughTheFormatRegistry()
     {
-        Assert.True(ReportFormats.CanTryParse("markup", out var format));
+        Assert.True(ReportFormats.CanTryParse("html", out var format));
         Assert.Equal(ReportFormat.Html, format);
         Assert.IsType<HypertextReportWriter>(ReportWriters.For(ReportFormat.Html));
-        Assert.Contains("markup", ReportFormats.Names);
+        Assert.Contains("html", ReportFormats.Names);
     }
 
     /// <summary>
@@ -111,8 +111,8 @@ public class HypertextReportWriterTests
     {
         var markup = HypertextFixtures.Render(Reports.Sample());
 
-        Assert.StartsWith("<!DOCTYPE markup>", markup, StringComparison.Ordinal);
-        Assert.Contains("</markup>", markup, StringComparison.Ordinal);
+        Assert.StartsWith("<!DOCTYPE html>", markup, StringComparison.Ordinal);
+        Assert.Contains("</html>", markup, StringComparison.Ordinal);
         Assert.DoesNotContain("{{", markup, StringComparison.Ordinal);
         Assert.DoesNotContain("http://", markup, StringComparison.Ordinal);
         Assert.DoesNotContain("https://", markup, StringComparison.Ordinal);

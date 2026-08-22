@@ -96,7 +96,7 @@ public class CliHostTests
 
         Assert.Contains("summary:", CliRunner.Run([workspace.Root, "--format", "yaml"]).Sink.Report.ToString(), StringComparison.Ordinal);
         Assert.StartsWith("{", CliRunner.Run([workspace.Root, "--format", "json"]).Sink.Report.ToString().TrimStart(), StringComparison.Ordinal);
-        Assert.StartsWith("<!DOCTYPE markup>", CliRunner.Run([workspace.Root, "--format", "markup"]).Sink.Report.ToString(), StringComparison.Ordinal);
+        Assert.StartsWith("<!DOCTYPE html>", CliRunner.Run([workspace.Root, "--format", "html"]).Sink.Report.ToString(), StringComparison.Ordinal);
     }
 
     /// <summary>

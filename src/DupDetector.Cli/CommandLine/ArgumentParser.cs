@@ -37,7 +37,7 @@ public static class ArgumentParser
             OptionDefinitions.Repeatable("--exclude-snippet", "text", "Suppress clusters whose source contains this text"),
             OptionDefinitions.Repeatable("--exclude-project", "text", "Suppress clusters confined to projects matching this text"),
             OptionDefinitions.Flag("--exclude-test-files", "Exclude test files from the entire run, not merely from the listings"),
-            OptionDefinitions.Value("--format", "yaml|json|markup|sarif", "Output format", "yaml"),
+            OptionDefinitions.Value("--format", "yaml|json|html|sarif", "Output format", "yaml"),
             OptionDefinitions.Value("--output", "path", "Write to a file instead of standard output"),
             OptionDefinitions.Flag("--no-raw-snippets", "Omit verbatim source from the report"),
             OptionDefinitions.Value("--fail-on", "0-100", "Exit with code 3 when duplication reaches this percentage"),

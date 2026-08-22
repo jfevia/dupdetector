@@ -7,8 +7,8 @@ public static class ReportTemplate
 {
 
     private const string Content = """
-<!DOCTYPE markup>
-<markup lang="en">
+<!DOCTYPE html>
+<html lang="en">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -79,7 +79,7 @@ public static class ReportTemplate
 <script id="report-data" type="application/json">{{DATA}}</script>
 <script>{{SCRIPT}}</script>
 </body>
-</markup>
+</html>
 
 """;
 

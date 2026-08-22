@@ -12,7 +12,7 @@ public static class ReportFormats
 
     static ReportFormats()
     {
-        Names = ["yaml", "json", "markup", "sarif"];
+        Names = ["yaml", "json", "html", "sarif"];
     }
 
     /// <summary>
@@ -31,7 +31,7 @@ public static class ReportFormats
             case "json":
                 format = ReportFormat.Json;
                 return true;
-            case "markup":
+            case "html":
                 format = ReportFormat.Html;
                 return true;
             case "sarif":

@@ -25,7 +25,7 @@ public class ReportFormatTests
     [Fact]
     public void Names_ListTheSupportedFormats()
     {
-        Assert.Equal(["yaml", "json", "markup", "sarif"], ReportFormats.Names);
+        Assert.Equal(["yaml", "json", "html", "sarif"], ReportFormats.Names);
     }
 
     /// <summary>
