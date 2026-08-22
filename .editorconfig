@@ -1,4 +1,4 @@
-root = true
+﻿root = true
 
 [*.cs]
 # Code style rules
@@ -167,8 +167,8 @@ resharper_web_config_wrong_module_highlighting = error
 [*]
 charset = utf-8-bom
 end_of_line = crlf
-trim_trailing_whitespace = false
-insert_final_newline = false
+trim_trailing_whitespace = true
+insert_final_newline = true
 indent_style = space
 indent_size = 4
 
@@ -177,3 +177,28 @@ indent_size = 2
 
 [*.{appxmanifest,asax,ascx,aspx,axaml,blockshader,c,c++,c++m,cc,ccm,cginc,compute,cp,cpp,cppm,cs,cshtml,cu,cuh,cxx,cxxm,dtd,fs,fsi,fsscript,fsx,fx,fxh,h,h++,hh,hlsl,hlsli,hlslinc,hp,hpp,hxx,icc,inc,inl,ino,ipp,ixx,master,ml,mli,mpp,mq4,mq5,mqh,mxx,nuspec,paml,pssl,pssli,razor,resw,resx,shader,shaderFoundry,skin,tcc,tpp,urtshader,usf,ush,uxml,vb,xaml,xamlx,xoml,xsd}]
 tab_width = 4
+
+# ----------------------------------------------------------------------------
+# Style preferences for the rewrite (src/DupDetector.{Core,Sources,Reporting}).
+# `dotnet_analyzer_diagnostic.severity = error` above promotes every analyzer
+# diagnostic, including pure style preferences, to a build error. These entries
+# state the intended style explicitly instead, resolving that contradiction.
+# ----------------------------------------------------------------------------
+csharp_style_expression_bodied_methods = when_on_single_line:suggestion
+csharp_style_expression_bodied_constructors = when_on_single_line:suggestion
+csharp_style_expression_bodied_properties = when_on_single_line:suggestion
+csharp_style_expression_bodied_accessors = when_on_single_line:suggestion
+csharp_style_expression_bodied_lambdas = when_on_single_line:suggestion
+csharp_style_expression_bodied_local_functions = when_on_single_line:suggestion
+
+# Expression-bodied members are a deliberate choice, not a defect.
+dotnet_diagnostic.IDE0021.severity = none
+dotnet_diagnostic.IDE0022.severity = none
+dotnet_diagnostic.IDE0023.severity = none
+dotnet_diagnostic.IDE0024.severity = none
+dotnet_diagnostic.IDE0025.severity = none
+dotnet_diagnostic.IDE0027.severity = none
+
+# Backing fields in DetectionSettings exist to validate on assignment; they are
+# not candidates for auto-properties.
+dotnet_diagnostic.IDE0032.severity = none

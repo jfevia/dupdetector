@@ -1,0 +1,37 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <!-- COMPOSITION. The only project permitted to touch the console. -->
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <RootNamespace>DupDetector.Cli</RootNamespace>
+        <AssemblyName>dupdetector</AssemblyName>
+        <PackAsTool>true</PackAsTool>
+        <ToolCommandName>dupdetector</ToolCommandName>
+        <PackageId>DupDetector</PackageId>
+        <Description>Detects duplicated C# code and reports it as YAML, JSON or HTML.</Description>
+        <PackageLicenseExpression>MIT</PackageLicenseExpression>
+        <PackageReadmeFile>README.md</PackageReadmeFile>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\DupDetector.Core\DupDetector.Core.csproj" />
+        <ProjectReference Include="..\DupDetector.Sources\DupDetector.Sources.csproj" />
+        <ProjectReference Include="..\DupDetector.Reporting\DupDetector.Reporting.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Microsoft.Build.Locator" />
+        <PackageReference Include="Microsoft.Build.Framework" ExcludeAssets="runtime" PrivateAssets="all" />
+        <PackageReference Include="Microsoft.Extensions.Logging" />
+        <PackageReference Include="Microsoft.Extensions.Logging.Console" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <InternalsVisibleTo Include="DupDetector.Cli.Tests" />
+    </ItemGroup>
+
+</Project>

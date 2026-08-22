@@ -1,0 +1,27 @@
+﻿version: 2
+
+updates:
+  # Central package management means every version lives in Directory.Packages.props.
+  - package-ecosystem: nuget
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    groups:
+      roslyn:
+        patterns:
+          - "Microsoft.CodeAnalysis*"
+      test-stack:
+        patterns:
+          - "xunit*"
+          - "Microsoft.NET.Test.Sdk"
+          - "coverlet.*"
+    commit-message:
+      prefix: "deps"
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "ci"

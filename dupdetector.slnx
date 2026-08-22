@@ -1,8 +1,15 @@
-<Solution>
+﻿<Solution>
   <Folder Name="/src/">
-    <Project Path="src/DupDetector/DupDetector.csproj" />
+    <Project Path="src/DupDetector.Core/DupDetector.Core.csproj" />
+    <Project Path="src/DupDetector.Sources/DupDetector.Sources.csproj" />
+    <Project Path="src/DupDetector.Reporting/DupDetector.Reporting.csproj" />
+    <Project Path="src/DupDetector.Cli/DupDetector.Cli.csproj" />
   </Folder>
   <Folder Name="/tests/">
-    <Project Path="tests/DupDetector.Tests/DupDetector.Tests.csproj" />
+    <Project Path="tests/DupDetector.TestKit/DupDetector.TestKit.csproj" />
+    <Project Path="tests/DupDetector.Core.Tests/DupDetector.Core.Tests.csproj" />
+    <Project Path="tests/DupDetector.Sources.Tests/DupDetector.Sources.Tests.csproj" />
+    <Project Path="tests/DupDetector.Reporting.Tests/DupDetector.Reporting.Tests.csproj" />
+    <Project Path="tests/DupDetector.Cli.Tests/DupDetector.Cli.Tests.csproj" />
   </Folder>
 </Solution>

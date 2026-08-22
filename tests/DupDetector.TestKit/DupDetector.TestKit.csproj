@@ -1,0 +1,15 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <RootNamespace>DupDetector.TestKit</RootNamespace>
+        <AssemblyName>DupDetector.TestKit</AssemblyName>
+        <IsPackable>false</IsPackable>
+        <!-- Fixture builders are exercised through the suites that consume them. -->
+        <ExcludeFromCodeCoverage>true</ExcludeFromCodeCoverage>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\..\src\DupDetector.Core\DupDetector.Core.csproj" />
+    </ItemGroup>
+
+</Project>

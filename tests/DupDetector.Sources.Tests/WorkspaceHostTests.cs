@@ -1,0 +1,356 @@
+﻿using DupDetector.Core.Model;
+using Microsoft.CodeAnalysis;
+using Xunit;
+
+namespace DupDetector.Sources.Tests;
+
+/// <summary>
+/// A workspace host backed by an in-memory solution, so every loading rule and error path can be
+/// exercised without an SDK.
+/// </summary>
+internal sealed class StubWorkspaceHost : IWorkspaceHost
+{
+    private readonly AdhocWorkspace _workspace = new();
+    private readonly Exception? _openFailure;
+
+    internal StubWorkspaceHost(Exception? openFailure = null) => _openFailure = openFailure;
+
+    internal List<SourceDiagnostic> Recorded { get; } = [];
+
+    public IReadOnlyList<Project> LoadedProjects => [.. _workspace.CurrentSolution.Projects];
+
+    public IReadOnlyList<Project> Open(string path, List<SourceDiagnostic> diagnostics, CancellationToken cancellationToken)
+    {
+        diagnostics.AddRange(Recorded);
+        return _openFailure is null ? LoadedProjects : throw _openFailure;
+    }
+
+    public void OpenAdditional(string projectPath, List<SourceDiagnostic> diagnostics, CancellationToken cancellationToken)
+    {
+        diagnostics.AddRange(Recorded);
+        Recorded.Clear();
+    }
+
+    public void Dispose() => _workspace.Dispose();
+
+    /// <summary>Adds a project with the given documents to the in-memory solution.</summary>
+    internal StubWorkspaceHost WithProject(string name, string projectFilePath, params (string Path, string Text)[] documents)
+    {
+        var projectId = ProjectId.CreateNewId(name);
+        var solution = _workspace.CurrentSolution.AddProject(ProjectInfo.Create(
+            projectId,
+            VersionStamp.Default,
+            name,
+            name,
+            LanguageNames.CSharp,
+            filePath: projectFilePath));
+
+        foreach (var (path, text) in documents)
+        {
+            solution = solution.AddDocument(
+                DocumentId.CreateNewId(projectId),
+                Path.GetFileName(path),
+                Microsoft.CodeAnalysis.Text.SourceText.From(text),
+                filePath: path);
+        }
+
+        Assert.True(_workspace.TryApplyChanges(solution));
+        return this;
+    }
+}
+
+public class WorkspaceDiagnosticsTests
+{
+    [Fact]
+    public void Describe_DropsTransitiveDuplicateNotices() =>
+        Assert.Null(WorkspaceDiagnostics.Describe(
+            new WorkspaceDiagnostic(WorkspaceDiagnosticKind.Warning, "Project X is already part of the workspace.")));
+
+    [Fact]
+    public void Describe_MapsFailureToError()
+    {
+        var described = WorkspaceDiagnostics.Describe(new WorkspaceDiagnostic(WorkspaceDiagnosticKind.Failure, "boom"));
+
+        Assert.NotNull(described);
+        Assert.Equal(SourceDiagnosticSeverity.Error, described.Severity);
+        Assert.Equal("boom", described.Message);
+    }
+
+    [Fact]
+    public void Describe_MapsWarningToWarning()
+    {
+        var described = WorkspaceDiagnostics.Describe(new WorkspaceDiagnostic(WorkspaceDiagnosticKind.Warning, "careful"));
+
+        Assert.NotNull(described);
+        Assert.Equal(SourceDiagnosticSeverity.Warning, described.Severity);
+    }
+}
+
+public class WorkspaceHarvesterTests
+{
+    private static readonly DetectionSettings Settings = new() { MinLines = 1 };
+
+    private static string Root => Path.GetFullPath(Path.Combine(Path.GetTempPath(), "harvest"));
+
+    private static string At(params string[] parts) => Path.Combine([Root, .. parts]);
+
+    [Fact]
+    public void Collect_ReadsDocumentsAndAssignsProjectIdentity()
+    {
+        using var host = new StubWorkspaceHost().WithProject("App", At("App.csproj"), (At("One.cs"), "class One { }"));
+
+        var result = WorkspaceHarvester.Collect(host.LoadedProjects, Root, Settings, CancellationToken.None);
+
+        var unit = Assert.Single(result.Units);
+        Assert.Equal(ProjectIdentity.Named("App"), unit.Project);
+        Assert.Equal("One.cs", unit.RelativePath);
+        Assert.Equal(DiscoveryMode.Workspace, result.Stats.Mode);
+        Assert.Equal(1, result.Stats.Discovered);
+    }
+
+    [Fact]
+    public void Collect_SkipsArtifactsAndExcludedGlobs()
+    {
+        using var host = new StubWorkspaceHost().WithProject(
+            "App",
+            At("App.csproj"),
+            (At("One.cs"), "class One { }"),
+            (At("obj", "Gen.cs"), "class Gen { }"),
+            (At("skip", "Two.cs"), "class Two { }"));
+
+        var result = WorkspaceHarvester.Collect(
+            host.LoadedProjects,
+            Root,
+            Settings with { ExcludeFileGlobs = ["skip/**"] },
+            CancellationToken.None);
+
+        Assert.Single(result.Units);
+        Assert.Equal(2, result.Stats.Excluded);
+    }
+
+    [Fact]
+    public void Collect_SkipsGeneratedFiles()
+    {
+        using var host = new StubWorkspaceHost().WithProject(
+            "App",
+            At("App.csproj"),
+            (At("One.cs"), "class One { }"),
+            (At("Two.cs"), "// <auto-generated />\nclass Two { }"));
+
+        var result = WorkspaceHarvester.Collect(host.LoadedProjects, Root, Settings, CancellationToken.None);
+
+        Assert.Single(result.Units);
+        Assert.Equal(1, result.Stats.Excluded);
+    }
+
+    [Fact]
+    public void Collect_CanExcludeTestFilesEntirely()
+    {
+        using var host = new StubWorkspaceHost()
+            .WithProject("App", At("App.csproj"), (At("One.cs"), "class One { }"))
+            .WithProject("App.Tests", At("App.Tests.csproj"), (At("OneTests.cs"), "class OneTests { }"));
+
+        var included = WorkspaceHarvester.Collect(host.LoadedProjects, Root, Settings, CancellationToken.None);
+        Assert.Equal(2, included.Units.Count);
+        Assert.Single(included.Units, unit => unit.IsTestFile);
+
+        var excluded = WorkspaceHarvester.Collect(
+            host.LoadedProjects,
+            Root,
+            Settings with { ExcludeTestFiles = true },
+            CancellationToken.None);
+
+        Assert.Single(excluded.Units);
+        Assert.Equal(1, excluded.Stats.Excluded);
+    }
+
+    [Fact]
+    public void Collect_ReportsParseFailuresWithoutDroppingTheFile()
+    {
+        using var host = new StubWorkspaceHost().WithProject("App", At("App.csproj"), (At("Bad.cs"), "class C { void M( }"));
+
+        var result = WorkspaceHarvester.Collect(host.LoadedProjects, Root, Settings, CancellationToken.None);
+
+        Assert.Single(result.Units);
+        Assert.Equal(SourceDiagnosticSeverity.Warning, Assert.Single(result.Diagnostics).Severity);
+    }
+
+    [Fact]
+    public void Collect_ReadsEachFileOnceEvenWhenSeveralProjectsShareIt()
+    {
+        // Multi-targeted projects surface the same file under each target framework.
+        using var host = new StubWorkspaceHost()
+            .WithProject("App", At("App.csproj"), (At("One.cs"), "class One { }"))
+            .WithProject("App(net9.0)", At("App.csproj"), (At("One.cs"), "class One { }"));
+
+        var result = WorkspaceHarvester.Collect(host.LoadedProjects, Root, Settings, CancellationToken.None);
+
+        Assert.Single(result.Units);
+        Assert.Equal(1, result.Stats.Discovered);
+    }
+
+    [Fact]
+    public void Collect_IgnoresDocumentsWithoutAPath()
+    {
+        using var host = new StubWorkspaceHost().WithProject("App", At("App.csproj"));
+        var projectId = host.LoadedProjects[0].Id;
+        var solution = host.LoadedProjects[0].Solution.AddDocument(
+            DocumentId.CreateNewId(projectId),
+            "InMemory.cs",
+            Microsoft.CodeAnalysis.Text.SourceText.From("class InMemory { }"));
+
+        var result = WorkspaceHarvester.Collect(
+            [.. solution.Projects],
+            Root,
+            Settings,
+            CancellationToken.None);
+
+        Assert.Empty(result.Units);
+    }
+
+    [Fact]
+    public void Collect_HonoursCancellation()
+    {
+        using var host = new StubWorkspaceHost().WithProject("App", At("App.csproj"), (At("One.cs"), "class One { }"));
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        Assert.Throws<OperationCanceledException>(() =>
+            WorkspaceHarvester.Collect(host.LoadedProjects, Root, Settings, cancellation.Token));
+    }
+}
+
+public class MsBuildSourceProviderErrorTests
+{
+    private static readonly DetectionSettings Settings = new() { MinLines = 1 };
+
+    [Fact]
+    public void Load_ReportsAnUnopenableInputAsAnError()
+    {
+        using var tree = new TempTree();
+        var project = tree.Write("App.csproj", "<Project />");
+        var host = new StubWorkspaceHost(new InvalidOperationException("no SDK"));
+
+        var result = new MsBuildSourceProvider(() => host).Load(project, Settings);
+
+        Assert.Empty(result.Units);
+        var diagnostic = Assert.Single(result.Diagnostics);
+        Assert.Equal(SourceDiagnosticSeverity.Error, diagnostic.Severity);
+        Assert.Contains("no SDK", diagnostic.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Load_TreatsAnEmptyWorkspaceAsAnErrorRatherThanACleanSolution()
+    {
+        using var tree = new TempTree();
+        var project = tree.Write("App.csproj", "<Project />");
+        var host = new StubWorkspaceHost();
+
+        var result = new MsBuildSourceProvider(() => host).Load(project, Settings);
+
+        Assert.Empty(result.Units);
+        Assert.Contains("produced no source files", Assert.Single(result.Diagnostics).Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Load_DoesNotAddAnEmptyWorkspaceErrorWhenSomethingElseAlreadyExplainedIt()
+    {
+        using var tree = new TempTree();
+        var project = tree.Write("App.csproj", "<Project />");
+        var host = new StubWorkspaceHost();
+        host.Recorded.Add(SourceDiagnostic.Error("restore failed"));
+
+        var result = new MsBuildSourceProvider(() => host).Load(project, Settings);
+
+        Assert.Equal("restore failed", Assert.Single(result.Diagnostics).Message);
+    }
+
+    [Fact]
+    public void Load_ReturnsUnitsWhenTheWorkspaceHasProjects()
+    {
+        using var tree = new TempTree();
+        var project = tree.Write("App.csproj", "<Project />");
+        var source = tree.Write("One.cs", "class One { }");
+        var host = new StubWorkspaceHost().WithProject("App", project, (source, "class One { }"));
+
+        var result = new MsBuildSourceProvider(() => host).Load(project, Settings);
+
+        Assert.Single(result.Units);
+        Assert.Empty(result.Diagnostics);
+    }
+}
+
+public class SlnxSourceProviderErrorTests
+{
+    private static readonly DetectionSettings Settings = new() { MinLines = 1 };
+
+    [Fact]
+    public void ATransitivelyLoadedProjectIsStillHarvested()
+    {
+        using var tree = new TempTree();
+        var app = tree.Write("App/App.csproj", "<Project />");
+        var lib = tree.Write("Lib/Lib.csproj", "<Project />");
+        var appSource = tree.Write("App/AppCalc.cs", "class AppCalc { }");
+        var libSource = tree.Write("Lib/LibCalc.cs", "class LibCalc { }");
+        var slnx = tree.Write("Sample.slnx", "<Solution><Project Path=\"App/App.csproj\" /><Project Path=\"Lib/Lib.csproj\" /></Solution>");
+
+        // Both projects are already in the workspace, as they would be after App pulled Lib in.
+        var host = new StubWorkspaceHost()
+            .WithProject("App", app, (appSource, "class AppCalc { }"))
+            .WithProject("Lib", lib, (libSource, "class LibCalc { }"));
+
+        var result = new SlnxSourceProvider(() => host).Load(slnx, Settings);
+
+        Assert.Equal(2, result.Units.Count);
+        Assert.Contains(result.Units, unit => unit.Path.EndsWith("LibCalc.cs", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void OnlyDeclaredProjectsAreHarvested()
+    {
+        using var tree = new TempTree();
+        var app = tree.Write("App/App.csproj", "<Project />");
+        var other = tree.Write("Other/Other.csproj", "<Project />");
+        var appSource = tree.Write("App/AppCalc.cs", "class AppCalc { }");
+        var otherSource = tree.Write("Other/OtherCalc.cs", "class OtherCalc { }");
+        var slnx = tree.Write("Sample.slnx", "<Solution><Project Path=\"App/App.csproj\" /></Solution>");
+
+        var host = new StubWorkspaceHost()
+            .WithProject("App", app, (appSource, "class AppCalc { }"))
+            .WithProject("Other", other, (otherSource, "class OtherCalc { }"));
+
+        var result = new SlnxSourceProvider(() => host).Load(slnx, Settings);
+
+        Assert.Single(result.Units);
+        Assert.EndsWith("AppCalc.cs", result.Units[0].Path, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ProjectLoadWarningsAreSurfaced()
+    {
+        using var tree = new TempTree();
+        var app = tree.Write("App/App.csproj", "<Project />");
+        var appSource = tree.Write("App/AppCalc.cs", "class AppCalc { }");
+        var slnx = tree.Write("Sample.slnx", "<Solution><Project Path=\"App/App.csproj\" /></Solution>");
+
+        var host = new StubWorkspaceHost().WithProject("App", app, (appSource, "class AppCalc { }"));
+        host.Recorded.Add(SourceDiagnostic.Warning("a reference was skipped"));
+
+        var result = new SlnxSourceProvider(() => host).Load(slnx, Settings);
+
+        Assert.Contains(result.Diagnostics, diagnostic => diagnostic.Message == "a reference was skipped");
+    }
+
+    [Fact]
+    public void Load_HonoursCancellation()
+    {
+        using var tree = new TempTree();
+        tree.Write("App/App.csproj", "<Project />");
+        var slnx = tree.Write("Sample.slnx", "<Solution><Project Path=\"App/App.csproj\" /></Solution>");
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        Assert.Throws<OperationCanceledException>(() =>
+            new SlnxSourceProvider(() => new StubWorkspaceHost()).Load(slnx, Settings, cancellation.Token));
+    }
+}

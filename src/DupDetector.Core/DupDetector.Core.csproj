@@ -1,0 +1,18 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <!-- PURE. No filesystem, no console, no MSBuild. Roslyn is the only permitted dependency. -->
+    <PropertyGroup>
+        <RootNamespace>DupDetector.Core</RootNamespace>
+        <AssemblyName>DupDetector.Core</AssemblyName>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <InternalsVisibleTo Include="DupDetector.Core.Tests" />
+        <InternalsVisibleTo Include="DupDetector.TestKit" />
+    </ItemGroup>
+
+</Project>

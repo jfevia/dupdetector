@@ -1,0 +1,25 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <!-- I/O OUT. Serialization only. Never references Sources. -->
+    <PropertyGroup>
+        <RootNamespace>DupDetector.Reporting</RootNamespace>
+        <AssemblyName>DupDetector.Reporting</AssemblyName>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\DupDetector.Core\DupDetector.Core.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="YamlDotNet" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <EmbeddedResource Include="Assets\*" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <InternalsVisibleTo Include="DupDetector.Reporting.Tests" />
+    </ItemGroup>
+
+</Project>

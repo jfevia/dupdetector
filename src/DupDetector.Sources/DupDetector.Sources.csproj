@@ -1,0 +1,23 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <!-- I/O IN. Owns every filesystem and encoding concern. Never references Reporting. -->
+    <PropertyGroup>
+        <RootNamespace>DupDetector.Sources</RootNamespace>
+        <AssemblyName>DupDetector.Sources</AssemblyName>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\DupDetector.Core\DupDetector.Core.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Microsoft.CodeAnalysis.Workspaces.MSBuild" />
+        <!-- MSBuild assemblies are located at run time by MSBuildLocator and must never be copied. -->
+        <PackageReference Include="Microsoft.Build.Framework" ExcludeAssets="runtime" PrivateAssets="all" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <InternalsVisibleTo Include="DupDetector.Sources.Tests" />
+    </ItemGroup>
+
+</Project>
