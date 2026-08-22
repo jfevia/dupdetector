@@ -6,11 +6,7 @@ namespace DupDetector.Reporting;
 /// <summary>
 /// Writes the report as SARIF 2.1.0.
 /// </summary>
-/// <remarks>
-/// One result per cluster, located at the first instance, with the remaining copies as related
-/// locations. This is the format code-scanning tooling ingests, so findings surface in review
-/// instead of only in a file someone has to open.
-/// </remarks>
+// One result per cluster: the first instance is the location and the rest are related locations.
 public sealed class SarifReportWriter : IReportWriter
 {
     public ReportFormat Format => ReportFormat.Sarif;

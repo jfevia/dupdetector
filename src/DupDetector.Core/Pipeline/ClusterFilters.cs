@@ -7,10 +7,7 @@ namespace DupDetector.Core.Pipeline;
 /// <summary>
 /// Post-detection cluster suppression.
 /// </summary>
-/// <remarks>
-/// Each rule is a named, individually testable predicate rather than a lambda buried in the
-/// pipeline, so the production expression is the one under test.
-/// </remarks>
+// Each rule is a named, testable predicate, so the production expression is the one under test.
 public static class ClusterFilters
 {
     /// <summary>True when any raw snippet contains one of the patterns, case-insensitively.</summary>
@@ -49,11 +46,7 @@ public static class ClusterFilters
     /// <summary>
     /// Removes clusters whose every instance sits inside an instance of a larger cluster.
     /// </summary>
-    /// <remarks>
-    /// When a whole type is duplicated, its members are duplicated with it. Reporting both describes
-    /// the same code twice and splits one refactoring into several findings, so only the widest
-    /// enclosing cluster is kept.
-    /// </remarks>
+    // A duplicated type duplicates its members too; reporting both describes the same code twice.
     public static IReadOnlyList<DuplicateCluster> SuppressContained(IReadOnlyList<DuplicateCluster> clusters)
     {
         ArgumentNullException.ThrowIfNull(clusters);

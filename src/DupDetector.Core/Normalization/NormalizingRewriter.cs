@@ -7,11 +7,7 @@ namespace DupDetector.Core.Normalization;
 /// <summary>
 /// Rewrites a member into its structural form.
 /// </summary>
-/// <remarks>
-/// Declared identifiers become <c>var0</c>, <c>var1</c>, ... in order of first appearance, and
-/// literals become kind placeholders. Type names and member-access names are left untouched, so a
-/// mapper over one domain type no longer collapses onto a mapper over another.
-/// </remarks>
+// Declared identifiers become var0, var1...; type and member-access names are left untouched.
 internal sealed class NormalizingRewriter : CSharpSyntaxRewriter
 {
     private readonly HashSet<string> _declared;

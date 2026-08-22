@@ -18,10 +18,7 @@ public sealed record AnalysisResult(DetectionReport Report, IReadOnlyList<Analys
 /// <summary>
 /// Runs extraction, detection, filtering and scoring over already-loaded source.
 /// </summary>
-/// <remarks>
-/// This is the whole analysis, expressed without touching a console, a filesystem or a clock, so it
-/// is directly testable rather than reachable only through a process entry point.
-/// </remarks>
+// Touches no console, filesystem or clock, so the whole analysis is directly testable.
 public static class AnalysisPipeline
 {
     public static AnalysisResult Run(

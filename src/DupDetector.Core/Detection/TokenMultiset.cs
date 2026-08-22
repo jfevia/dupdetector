@@ -24,10 +24,7 @@ public sealed class TokenInterner
 /// <summary>
 /// A block's tokens as a multiset: distinct ids in ascending order with their repeat counts.
 /// </summary>
-/// <remarks>
-/// Keeping counts rather than collapsing to a set means a short member and a long one built from
-/// the same few identifiers no longer score as identical.
-/// </remarks>
+// Counts rather than a set, so a short member and a long one sharing identifiers no longer match.
 public sealed class TokenMultiset
 {
     private static readonly char[] Separators =

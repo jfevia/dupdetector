@@ -3,10 +3,7 @@
 /// <summary>
 /// Recognises machine-generated files.
 /// </summary>
-/// <remarks>
-/// Content markers are only honoured in the file header, where the convention places them. Scanning
-/// the whole body meant any file that merely mentioned a marker excluded itself.
-/// </remarks>
+// Markers count only in the header; scanning the body made any file mentioning one exclude itself.
 public static class GeneratedFileDetector
 {
     /// <summary>How far into a file a generated-code marker is still considered a header marker.</summary>

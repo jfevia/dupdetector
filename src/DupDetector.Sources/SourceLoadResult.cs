@@ -12,10 +12,7 @@ public enum SourceDiagnosticSeverity
 /// <summary>
 /// Something the loader needs to tell the caller about.
 /// </summary>
-/// <remarks>
-/// Diagnostics are returned as data rather than written to a console, so loading stays usable as a
-/// library and testable without capturing output.
-/// </remarks>
+// Diagnostics are data, not console writes, so loading stays usable as a library and testable.
 public sealed record SourceDiagnostic(SourceDiagnosticSeverity Severity, string Message, string? Path = null)
 {
     public static SourceDiagnostic Warning(string message, string? path = null) =>

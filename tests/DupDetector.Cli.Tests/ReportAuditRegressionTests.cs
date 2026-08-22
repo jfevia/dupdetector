@@ -11,11 +11,8 @@ namespace DupDetector.Cli.Tests;
 /// <summary>
 /// One test per defect confirmed while auditing the duplication report the tool produced.
 /// </summary>
-/// <remarks>
-/// Each test names the behaviour that was wrong, so a regression is recognised rather than
-/// rediscovered. See docs/disproven-findings.md for the claims that were refuted and must not be
-/// "fixed".
-/// </remarks>
+// Each test names the behaviour that was wrong, so a regression is recognised rather than rediscovered.
+// See docs/disproven-findings.md for claims that were refuted and must not be "fixed".
 public class ReportAuditRegressionTests
 {
     /// <summary>

@@ -5,10 +5,7 @@ namespace DupDetector.Sources;
 /// <summary>
 /// Finds the project that owns a file by walking up to the nearest project file.
 /// </summary>
-/// <remarks>
-/// Results are memoised per directory. Without that cache every file in a directory repeats the
-/// same walk, which measured as the single largest cost in a directory scan.
-/// </remarks>
+// Memoised per directory; without the cache this was the largest single cost in a directory scan.
 public sealed class ProjectNameResolver
 {
     private readonly Dictionary<string, ProjectIdentity> _byDirectory = new(StringComparer.OrdinalIgnoreCase);

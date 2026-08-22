@@ -8,21 +8,8 @@ public readonly record struct SimilarPair(int Left, int Right, double Similarity
 /// <summary>
 /// Finds every pair of blocks whose multiset Jaccard similarity meets a threshold.
 /// </summary>
-/// <remarks>
-/// <para>
-/// Candidates come from an inverted token index instead of comparing all pairs. Two pruning rules
-/// make that safe, and both are exact rather than probabilistic:
-/// </para>
-/// <list type="bullet">
-/// <item>a pair sharing no token has similarity zero, so it cannot meet a positive threshold;</item>
-/// <item>similarity can never exceed <c>min(|a|,|b|) / max(|a|,|b|)</c>, so pairs whose sizes differ
-/// by more than the threshold allows are skipped.</item>
-/// </list>
-/// <para>
-/// Neither rule can discard a qualifying pair, so the result is identical to comparing every pair.
-/// Nothing here samples, hashes or approximates.
-/// </para>
-/// </remarks>
+// Candidates come from an inverted token index, pruned by shared tokens and by size ratio.
+// Both pruning rules are exact, so the result equals an all-pairs comparison.
 public static class SimilarityJoin
 {
     /// <summary>

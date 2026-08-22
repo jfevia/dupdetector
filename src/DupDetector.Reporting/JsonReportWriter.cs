@@ -24,11 +24,7 @@ public sealed class JsonReportWriter(bool includeRawSnippets = true) : IReportWr
     /// <summary>
     /// Options for JSON embedded inside markup.
     /// </summary>
-    /// <remarks>
-    /// This is a security control, not a formatting preference. The strict encoder escapes the
-    /// characters that would otherwise let source content close the surrounding element, so it must
-    /// not be relaxed to match <see cref="Standalone"/>.
-    /// </remarks>
+    // A security control, not a formatting choice: the strict encoder stops content closing the element.
     public static JsonSerializerOptions EmbeddedInMarkup { get; } = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,

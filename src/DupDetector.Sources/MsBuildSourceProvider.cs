@@ -5,10 +5,7 @@ namespace DupDetector.Sources;
 /// <summary>
 /// Loads source from a solution or project via MSBuild, so files carry real project identity.
 /// </summary>
-/// <remarks>
-/// A workspace that yields nothing is reported as an error rather than an empty success, because an
-/// empty report and a genuinely clean solution are otherwise indistinguishable.
-/// </remarks>
+// An empty workspace is an error, not an empty success, which a clean solution is indistinguishable from.
 public sealed class MsBuildSourceProvider : ISourceProvider
 {
     private readonly Func<IWorkspaceHost> _createHost;

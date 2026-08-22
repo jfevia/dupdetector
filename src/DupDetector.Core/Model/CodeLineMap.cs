@@ -6,11 +6,7 @@ namespace DupDetector.Core.Model;
 /// <summary>
 /// Which physical lines of a file carry code rather than blanks or comments.
 /// </summary>
-/// <remarks>
-/// Derived from the parsed tokens rather than from text heuristics, so string literals containing
-/// <c>//</c> and multi-line verbatim strings are classified correctly. Lets duplication be expressed
-/// against analysable lines, which is what comparable tools report.
-/// </remarks>
+// Derived from parsed tokens, so "//" inside a string literal is not mistaken for a comment.
 public sealed class CodeLineMap
 {
     private readonly bool[] _isCode;

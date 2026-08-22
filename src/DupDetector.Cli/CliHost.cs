@@ -23,10 +23,7 @@ public interface IOutputSink
 /// <summary>
 /// Runs one invocation end to end.
 /// </summary>
-/// <remarks>
-/// The entry point delegates here immediately, so the whole program is reachable from a test rather
-/// than only from a process.
-/// </remarks>
+// The entry point delegates here immediately, so the whole program is reachable from a test.
 public sealed class CliHost(ILogger logger, IOutputSink output, SourceLoader? loader = null, TimeProvider? time = null)
 {
     private readonly SourceLoader _loader = loader ?? new SourceLoader();

@@ -7,10 +7,7 @@ namespace DupDetector.Reporting;
 /// <summary>
 /// Writes the report as YAML.
 /// </summary>
-/// <remarks>
-/// Serialization is delegated to YamlDotNet rather than hand-rolled, which is what makes quoting,
-/// culture-invariant numbers and empty sequences correct by construction instead of by inspection.
-/// </remarks>
+// Delegated to YamlDotNet, which makes quoting and culture-invariant numbers correct by construction.
 public sealed class YamlReportWriter(bool includeRawSnippets = true) : IReportWriter
 {
     private static readonly ISerializer Serializer = new SerializerBuilder()

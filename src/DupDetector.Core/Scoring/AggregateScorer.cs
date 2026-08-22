@@ -5,10 +5,7 @@ namespace DupDetector.Core.Scoring;
 /// <summary>
 /// Turns clusters into file, project and run level percentages.
 /// </summary>
-/// <remarks>
-/// Every percentage is duplicated lines over total lines. Because duplicated lines are counted with
-/// <see cref="LineSpanMerger"/>, the numerator can never exceed the denominator and no clamp is needed.
-/// </remarks>
+// Duplicated lines are merged before counting, so the numerator can never exceed the denominator.
 public static class AggregateScorer
 {
     /// <summary>Rounds a percentage to two places, away from zero rather than to even.</summary>

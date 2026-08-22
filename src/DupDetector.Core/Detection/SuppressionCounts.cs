@@ -3,10 +3,7 @@
 /// <summary>
 /// Records how many clusters each threshold discarded.
 /// </summary>
-/// <remarks>
-/// A duplication percentage means nothing without the thresholds that produced it. Reporting the
-/// counts alongside the result stops a narrow measurement from reading as a clean bill of health.
-/// </remarks>
+// A duplication percentage means nothing without the thresholds that produced it.
 public sealed record SuppressionCounts
 {
     public int BelowFileSpread { get; init; }

@@ -6,10 +6,7 @@ namespace DupDetector.Reporting;
 /// <summary>
 /// The minimum a run needs to record so a later run can say what changed.
 /// </summary>
-/// <remarks>
-/// Only cluster identity and size are kept. Storing the full report would make baselines large and
-/// would embed absolute paths that break the moment a checkout moves.
-/// </remarks>
+// Only identity and size are kept: a full report is large and embeds paths that break when a checkout moves.
 public sealed class Baseline
 {
     public required string GeneratedAtUtc { get; init; }

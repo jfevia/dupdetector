@@ -8,11 +8,7 @@ namespace DupDetector.Core.Matching;
 /// The single glob engine. Path exclusion and cluster exclusion share it, so a pattern means the
 /// same thing everywhere.
 /// </summary>
-/// <remarks>
-/// Semantics follow gitignore: matching is case-insensitive, <c>*</c> stays inside one segment,
-/// <c>**</c> spans zero or more segments, a pattern matches at any depth, and naming a directory
-/// also matches everything beneath it.
-/// </remarks>
+// gitignore semantics: * stays within a segment, ** spans segments, a directory matches its contents.
 public sealed class GlobPattern
 {
     private static readonly TimeSpan MatchTimeout = TimeSpan.FromSeconds(1);

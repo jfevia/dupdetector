@@ -8,10 +8,7 @@ namespace DupDetector.Reporting;
 /// <summary>
 /// Renders a self-contained HTML report.
 /// </summary>
-/// <remarks>
-/// The page embeds only what it displays. Verbatim source is never included, so sharing a report
-/// does not also share the code it describes.
-/// </remarks>
+// Verbatim source is never embedded, so sharing a report does not share the code it describes.
 public sealed class HtmlReportWriter : IReportWriter
 {
     private static readonly string Template = ReadAsset("report.html");

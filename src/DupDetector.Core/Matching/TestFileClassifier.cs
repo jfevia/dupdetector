@@ -6,11 +6,7 @@ namespace DupDetector.Core.Matching;
 /// <summary>
 /// Decides whether a file belongs to a test project.
 /// </summary>
-/// <remarks>
-/// Classification looks at whole words, not raw suffixes, so <c>Latest.cs</c> and <c>Contest.cs</c>
-/// stay production code. Paths are examined relative to the scan root, so a checkout living under a
-/// directory such as <c>C:\test\</c> does not mark the whole tree as tests.
-/// </remarks>
+// Whole-word matching on the path relative to the scan root, so Latest.cs and C:\test\ are not tests.
 public static partial class TestFileClassifier
 {
     private static readonly string[] TestWords = ["test", "tests", "spec", "specs"];

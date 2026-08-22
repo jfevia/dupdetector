@@ -39,10 +39,7 @@ public enum OptionArity
 /// <summary>
 /// One command-line option.
 /// </summary>
-/// <remarks>
-/// Help text is generated from this table, so a documented default cannot drift away from the
-/// default the parser actually applies.
-/// </remarks>
+// Help text is generated from this table, so a documented default cannot drift from the real one.
 public sealed record OptionDefinition(
     string Name,
     OptionArity Arity,

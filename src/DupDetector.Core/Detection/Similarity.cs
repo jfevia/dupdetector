@@ -9,10 +9,7 @@ public static class Similarity
     /// Returns the multiset Jaccard similarity of two token multisets, in the range 0 to 1.
     /// Two empty multisets are identical.
     /// </summary>
-    /// <remarks>
-    /// The union size is derived arithmetically as <c>|a| + |b| - overlap</c>, so no intermediate
-    /// collection is allocated even though this runs on every candidate pair.
-    /// </remarks>
+    // Union is derived as |a| + |b| - overlap, so no intermediate collection is allocated per pair.
     public static double Jaccard(TokenMultiset a, TokenMultiset b)
     {
         var overlap = Overlap(a, b);
@@ -57,10 +54,7 @@ public static class Similarity
     /// <summary>
     /// Largest similarity two multisets of these sizes could possibly reach.
     /// </summary>
-    /// <remarks>
-    /// Since <c>overlap &lt;= min(|a|,|b|)</c> and <c>union &gt;= max(|a|,|b|)</c>, this bound is
-    /// exact: a pair it rejects can never meet the threshold, so pruning on it loses no results.
-    /// </remarks>
+    // Exact bound: a pair it rejects can never meet the threshold, so pruning on it loses no results.
     public static double UpperBound(int cardinalityA, int cardinalityB)
     {
         var larger = Math.Max(cardinalityA, cardinalityB);

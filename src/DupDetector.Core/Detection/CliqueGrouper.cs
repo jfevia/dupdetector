@@ -27,19 +27,8 @@ public sealed record SimilarityGroup(IReadOnlyList<int> Members, bool IsCohesive
 /// <summary>
 /// Turns similar pairs into groups of mutually similar blocks.
 /// </summary>
-/// <remarks>
-/// <para>
-/// Grouping by connectivity alone is unsound because similarity is not transitive: A can match B and
-/// B match C while A and C share nothing, yet all three would land in one group. This enumerates
-/// maximal cliques instead, so every member of a reported group is similar to every other member,
-/// and a block that genuinely belongs to two groups appears in both.
-/// </para>
-/// <para>
-/// Clique enumeration is exponential in the worst case, so each connected component is enumerated
-/// under a budget. A component that exceeds it degrades to the connectivity grouping for that
-/// component alone and is marked non-exhaustive, which bounds the work without hiding the fact.
-/// </para>
-/// </remarks>
+// Similarity is not transitive, so a connectivity grouping would merge blocks that share nothing.
+// Clique enumeration is exponential, so a component exceeding the budget degrades to connectivity.
 public static class CliqueGrouper
 {
     /// <summary>

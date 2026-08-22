@@ -7,16 +7,8 @@ namespace DupDetector.Sources;
 /// <summary>
 /// Loads source from a <c>.slnx</c> solution file.
 /// </summary>
-/// <remarks>
-/// <para>
-/// <c>.slnx</c> is the XML solution format, not a solution filter.
-/// </para>
-/// <para>
-/// A project pulled in as a transitive reference of an earlier project is already present in the
-/// workspace. Such a project must still be harvested: skipping it silently dropped every file it
-/// owned, which is how a genuine cross-project duplicate could go entirely unreported.
-/// </para>
-/// </remarks>
+// .slnx is the XML solution format, not a solution filter.
+// A transitively referenced project must still be harvested, or every file it owns is dropped silently.
 public sealed class SlnxSourceProvider : ISourceProvider
 {
     private readonly Func<IWorkspaceHost> _createHost;

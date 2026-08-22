@@ -47,10 +47,7 @@ public sealed record ParseResult(CommandLineOptions? Options, string? Message, s
 /// <summary>
 /// Parses the command line.
 /// </summary>
-/// <remarks>
-/// Unknown options and missing values are fatal, and each is reported for what it is. Silently
-/// continuing turns a typo into a green run with the wrong settings.
-/// </remarks>
+// Unknown options and missing values are fatal: a typo must not become a green run with wrong settings.
 public static class ArgumentParser
 {
     private static readonly DetectionSettings Defaults = DetectionSettings.Default;

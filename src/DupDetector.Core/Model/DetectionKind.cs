@@ -21,11 +21,7 @@ public enum DetectionKind
     /// <summary>
     /// Whole type declarations: classes, records and structs.
     /// </summary>
-    /// <remarks>
-    /// Required to see a small type that is copied verbatim. Such a type is invisible to member-level
-    /// extraction alone, because each of its members can sit below the minimum size while the type as
-    /// a whole is substantial.
-    /// </remarks>
+    // Needed to see a small type copied verbatim: each of its members can sit below the minimum size.
     Types = 1 << 6,
 
     /// <summary>Every member kind. Does not include <see cref="Types"/>.</summary>

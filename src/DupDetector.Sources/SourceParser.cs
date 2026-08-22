@@ -7,12 +7,7 @@ namespace DupDetector.Sources;
 /// <summary>
 /// Parses C# with an explicit language version.
 /// </summary>
-/// <remarks>
-/// The default parse options track whatever the referenced Roslyn shipped with, which silently
-/// turns newer syntax into parse errors. Pinning <see cref="LanguageVersion.Preview"/> keeps the
-/// widest possible range of source parseable, and callers are handed the diagnostics rather than
-/// letting an unparseable construct quietly discard every member in the file.
-/// </remarks>
+// LanguageVersion.Preview is pinned: the default tracks the shipped Roslyn and rejects newer syntax.
 public static class SourceParser
 {
     public static CSharpParseOptions Options { get; } = new(

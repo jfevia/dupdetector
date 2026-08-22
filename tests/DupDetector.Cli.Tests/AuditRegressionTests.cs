@@ -13,10 +13,7 @@ namespace DupDetector.Cli.Tests;
 /// <summary>
 /// One test per defect reproduced during the audit of the previous implementation.
 /// </summary>
-/// <remarks>
-/// Each test names the behaviour that was observed before, so a regression is recognised for what
-/// it is rather than rediscovered from scratch.
-/// </remarks>
+// Each test names the behaviour observed before, so a regression is recognised rather than rediscovered.
 public class AuditRegressionTests
 {
     private static string Hash(string source) =>

@@ -6,10 +6,7 @@ namespace DupDetector.Core.Pipeline;
 /// <summary>
 /// The boundaries of what a run actually measured.
 /// </summary>
-/// <remarks>
-/// Published with every report so a low percentage cannot be read as a clean bill of health without
-/// also seeing the thresholds that produced it.
-/// </remarks>
+// Published with every report so a low percentage cannot be read as a clean bill of health.
 public sealed record AnalysisScope
 {
     public required DetectionSettings Settings { get; init; }

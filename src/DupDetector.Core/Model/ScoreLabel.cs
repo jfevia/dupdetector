@@ -14,10 +14,7 @@ public enum ScoreLabel
 /// <summary>
 /// Maps a 0-100 percentage onto a <see cref="ScoreLabel"/>.
 /// </summary>
-/// <remarks>
-/// Aligned with the SonarQube "Sonar way" gate, which fails at 3% duplicated lines. Wider bands
-/// would let a codebase read <c>Low</c> here while failing the gate everywhere else.
-/// </remarks>
+// Aligned with the SonarQube "Sonar way" gate, which fails at 3% duplicated lines.
 public static class ScoreLabels
 {
     public static ScoreLabel For(double percentage) => percentage switch

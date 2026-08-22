@@ -5,10 +5,7 @@ namespace DupDetector.Sources;
 /// <summary>
 /// Decodes a source file, detecting UTF-16 even when no byte-order mark is present.
 /// </summary>
-/// <remarks>
-/// Reading UTF-16 without a mark as UTF-8 yields text interleaved with NUL characters, which parses
-/// into garbage and pollutes detection with no warning. Sniffing for that pattern avoids it.
-/// </remarks>
+// UTF-16 read as UTF-8 yields NUL-interleaved text that parses into garbage, so the pattern is sniffed.
 public static class SourceDecoder
 {
     /// <summary>Number of leading bytes examined when sniffing an unmarked file.</summary>

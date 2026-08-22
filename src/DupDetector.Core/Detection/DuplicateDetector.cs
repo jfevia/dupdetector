@@ -7,11 +7,7 @@ namespace DupDetector.Core.Detection;
 /// <summary>
 /// Groups code blocks into duplicate clusters.
 /// </summary>
-/// <remarks>
-/// Verbatim copies are grouped first by structural hash. Whatever remains goes to the similarity
-/// join when a near-duplicate threshold below 1.0 is configured, and the resulting pairs become
-/// mutually similar groups via <see cref="CliqueGrouper"/>.
-/// </remarks>
+// Exact copies group by hash first; whatever remains goes to the similarity join when it is enabled.
 public static class DuplicateDetector
 {
     public static IReadOnlyList<DuplicateCluster> Detect(IReadOnlyList<CodeBlock> blocks, DetectionSettings settings) =>
@@ -53,10 +49,7 @@ public static class DuplicateDetector
     }
 
     /// <summary>Running totals of what each threshold rejected.</summary>
-    /// <remarks>
-    /// Keyed on cluster id because a group rejected by the exact pass is deliberately left unclaimed
-    /// and re-forms in the near-duplicate pass; counting it twice would overstate what was withheld.
-    /// </remarks>
+    // Keyed on cluster id: a group rejected by the exact pass re-forms in the near pass and would count twice.
     private sealed class Tally
     {
         private readonly Dictionary<string, HashSet<string>> _byReason = [];
@@ -184,13 +177,8 @@ public static class DuplicateDetector
     /// <summary>
     /// Applied to near-duplicate clusters only.
     /// </summary>
-    /// <remarks>
-    /// These are a precision guard for the similarity join, where a sub-1.0 threshold can assemble a
-    /// large, weakly related clique. An exact cluster shares one structural hash by construction, so
-    /// it cannot be a false positive and its width is the finding rather than the noise: at the
-    /// default limit of 20 files, applying this to exact clusters would discard a class duplicated
-    /// verbatim across 25 files, which is the most valuable result the tool produces.
-    /// </remarks>
+    // A precision guard for the fuzzy join only: an exact cluster shares one hash and cannot be a false positive.
+    // At the default limit of 20 files this would discard a class copied verbatim across 25.
     private static bool WithinMaximums(DuplicateCluster cluster, DetectionSettings settings) =>
         (settings.MaxFileSpread == 0 || cluster.Metrics.FileSpread <= settings.MaxFileSpread) &&
         (settings.MaxOccurrences == 0 || cluster.Metrics.Occurrences <= settings.MaxOccurrences);

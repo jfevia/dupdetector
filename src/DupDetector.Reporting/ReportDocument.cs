@@ -8,10 +8,7 @@ namespace DupDetector.Reporting;
 /// <summary>
 /// The shape written to YAML and JSON.
 /// </summary>
-/// <remarks>
-/// Serializing a dedicated document rather than the domain model keeps the on-disk schema stable
-/// when the model changes, and keeps verbatim source out of the output unless it is asked for.
-/// </remarks>
+// A dedicated shape keeps the on-disk schema stable when the domain model changes.
 public sealed class ReportDocument
 {
     public required SummaryDocument Summary { get; init; }

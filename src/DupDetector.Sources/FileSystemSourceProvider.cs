@@ -6,10 +6,7 @@ namespace DupDetector.Sources;
 /// <summary>
 /// Loads C# files from a directory or a single file.
 /// </summary>
-/// <remarks>
-/// Enumeration skips unreadable directories and reparse points, so neither a permission-denied
-/// folder nor a directory junction can abort a scan or send it into runaway recursion.
-/// </remarks>
+// Skips unreadable directories and reparse points, so neither aborts a scan nor causes runaway recursion.
 public sealed class FileSystemSourceProvider : ISourceProvider
 {
     private static readonly EnumerationOptions Enumeration = new()
